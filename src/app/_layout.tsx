@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { installDesktopChrome } from '@/lib/desktopChrome';
 import { useDesktopShortcuts } from '@/lib/useDesktopShortcuts';
 import { initPlayer } from '@/player/store';
 import { useDownloads } from '@/state/downloads';
@@ -14,6 +15,7 @@ import { startNetworkWatcher } from '@/state/network';
 import { colors } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
+installDesktopChrome();
 
 const theme = {
   ...DarkTheme,

@@ -2,6 +2,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use tauri::http::{header, Request, Response, StatusCode};
+use tauri::{Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 use tauri_plugin_http::reqwest;
 use tokio::sync::Semaphore;
 
@@ -17,6 +18,16 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                fit_to_screen(&window);
+                #[cfg(windows)]
+                paint_title_bar(&window);
+                // Nace oculta (tauri.conf.json) para no verla saltar de tamaño al abrir.
+                let _ = window.show();
+            }
+            Ok(())
+        })
         .register_asynchronous_uri_scheme_protocol("drive", |_ctx, request, responder| {
             tauri::async_runtime::spawn(async move {
                 responder.respond(proxy_drive(request).await);
@@ -24,6 +35,48 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("no se pudo iniciar Sonaura");
+}
+
+/// Tamaño inicial según la pantalla: ~1280×860 en un monitor grande y, en uno pequeño,
+/// el 90 % del área útil (sin la barra de tareas), siempre centrada en ella.
+fn fit_to_screen(window: &WebviewWindow) {
+    let Ok(Some(monitor)) = window.current_monitor() else { return };
+    let area = monitor.work_area();
+    let scale = monitor.scale_factor();
+    let width = (1280.0 * scale).min(f64::from(area.size.width) * 0.9);
+    let height = (860.0 * scale).min(f64::from(area.size.height) * 0.9);
+    let _ = window.set_size(PhysicalSize::new(width as u32, height as u32));
+    let x = area.position.x + ((f64::from(area.size.width) - width) / 2.0) as i32;
+    let y = area.position.y + ((f64::from(area.size.height) - height) / 2.0) as i32;
+    let _ = window.set_position(PhysicalPosition::new(x, y));
+}
+
+/// Barra de título con el color de la app (Windows 11; en Windows 10 queda el tema oscuro).
+#[cfg(windows)]
+fn paint_title_bar(window: &WebviewWindow) {
+    use windows::Win32::Foundation::COLORREF;
+    use windows::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR,
+    };
+    let Ok(hwnd) = window.hwnd() else { return };
+    // COLORREF es 0x00BBGGRR: fondo #0A0717 (el de la app) y texto #F5F2FF.
+    let background = COLORREF(0x0017_070A);
+    let text = COLORREF(0x00FF_F2F5);
+    for (attribute, color) in [
+        (DWMWA_CAPTION_COLOR, background),
+        (DWMWA_BORDER_COLOR, background),
+        (DWMWA_TEXT_COLOR, text),
+    ] {
+        // Falla sin consecuencias en Windows 10 (atributos no soportados).
+        let _ = unsafe {
+            DwmSetWindowAttribute(
+                hwnd,
+                attribute,
+                std::ptr::from_ref(&color).cast(),
+                std::mem::size_of::<COLORREF>() as u32,
+            )
+        };
+    }
 }
 
 /// Bytes por respuesta: el reproductor pide el resto con nuevos rangos, así suena enseguida
@@ -151,8 +204,17 @@ async fn proxy_drive(request: Request<Vec<u8>>) -> Response<Vec<u8>> {
         return empty(StatusCode::SERVICE_UNAVAILABLE);
     };
     let url = format!("https://drive.usercontent.google.com/download?id={id}&export=download");
-    let Ok(upstream) = client().get(url).header(header::RANGE, upstream_header).send().await else {
-        return empty(StatusCode::BAD_GATEWAY);
+    // Un reintento ante fallos momentáneos de Drive (red, 5xx o 429 por exceso de peticiones).
+    let mut attempt = 0;
+    let upstream = loop {
+        attempt += 1;
+        match client().get(&url).header(header::RANGE, &upstream_header).send().await {
+            Ok(r) if attempt < 2 && (r.status().is_server_error() || r.status().as_u16() == 429) => {}
+            Ok(r) => break r,
+            Err(_) if attempt < 2 => {}
+            Err(_) => return empty(StatusCode::BAD_GATEWAY),
+        }
+        tokio::time::sleep(Duration::from_millis(400)).await;
     };
     let content_type = upstream.headers().get(header::CONTENT_TYPE).map(|v| v.as_bytes().to_vec());
 
