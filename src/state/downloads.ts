@@ -1,8 +1,9 @@
-import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { Track } from '@/catalog';
+import { assertIsAudioHead } from '@/state/audioHead';
+import { fileStore } from '@/state/fileStore';
 import { safeStorage } from '@/state/storage';
 
 type DownloadRecord = {
@@ -23,44 +24,18 @@ type DownloadsState = {
   enqueue: (tracks: Track[]) => void;
   cancel: (id: string) => void;
   remove: (ids: string[]) => void;
-  reconcile: () => void;
+  reconcile: () => Promise<void>;
 };
 
 const MAX_PARALLEL = 2;
 const pending: Track[] = [];
 const active = new Map<string, AbortController>();
-
-const baseDir = () => new Directory(Paths.document, 'sonaura');
-const tracksDir = () => new Directory(baseDir(), 'tracks');
-const coversDir = () => new Directory(baseDir(), 'covers');
-
-function ensureDirs() {
-  for (const dir of [baseDir(), tracksDir(), coversDir()]) {
-    if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
-  }
-}
+/** Portadas en descarga: varias pistas del mismo álbum terminan casi a la vez. */
+const coversInFlight = new Set<string>();
 
 function fileNameFor(track: Track): string {
   const ext = /\.([a-z0-9]{2,4})$/i.exec(track.fileName)?.[1]?.toLowerCase() ?? 'mp3';
   return `${track.id}.${ext}`;
-}
-
-/**
- * Drive devuelve una página HTML (no el audio) cuando limita la descarga de un archivo.
- * Se miran solo los primeros bytes, sin decodificar el binario como texto.
- */
-function assertIsAudio(file: File) {
-  if ((file.size ?? 0) === 0) throw new Error('Descarga vacía');
-  const handle = file.open(FileMode.ReadOnly);
-  let head: string;
-  try {
-    head = String.fromCharCode(...handle.readBytes(512)).trimStart().toLowerCase();
-  } finally {
-    handle.close();
-  }
-  if (head.startsWith('<') && (head.includes('<html') || head.includes('<!doctype'))) {
-    throw new Error('Drive limitó la descarga, inténtalo más tarde');
-  }
 }
 
 export const useDownloads = create<DownloadsState>()(
@@ -83,37 +58,40 @@ export const useDownloads = create<DownloadsState>()(
       };
 
       const saveCover = async (track: Track) => {
-        if (!track.artworkUrl || get().covers[track.albumId]) return;
-        const fileName = `${track.albumId}.jpg`;
+        const albumId = track.albumId;
+        if (!track.artworkUrl || get().covers[albumId] || coversInFlight.has(albumId)) return;
+        // Un solo escritor por portada: si dos descargas la escribieran a la vez, la imagen
+        // podría mostrarse a medio escribir.
+        coversInFlight.add(albumId);
+        const fileName = `${albumId}.jpg`;
         try {
-          await File.downloadFileAsync(track.artworkUrl, new File(coversDir(), fileName), { idempotent: true });
-          set((s) => ({ covers: { ...s.covers, [track.albumId]: fileName } }));
+          await fileStore.download('covers', track.artworkUrl, fileName);
+          set((s) => ({ covers: { ...s.covers, [albumId]: fileName } }));
         } catch {
           // La portada es opcional: sin ella se usa el arte generado.
+        } finally {
+          coversInFlight.delete(albumId);
         }
       };
 
       const start = async (track: Track) => {
         const controller = new AbortController();
         active.set(track.id, controller);
-        const dest = new File(tracksDir(), fileNameFor(track));
+        const fileName = fileNameFor(track);
         try {
-          ensureDirs();
-          if (dest.exists) dest.delete();
-          const file = await File.downloadFileAsync(track.streamUrl, dest, {
-            idempotent: true,
+          await fileStore.ensureDirs();
+          await fileStore.remove('tracks', fileName);
+          const bytes = await fileStore.download('tracks', track.streamUrl, fileName, {
             signal: controller.signal,
-            onProgress: ({ bytesWritten, totalBytes }) => {
-              if (totalBytes > 0) setProgress(track.id, bytesWritten / totalBytes);
-            },
+            onProgress: (ratio) => setProgress(track.id, ratio),
           });
-          assertIsAudio(file);
+          assertIsAudioHead(await fileStore.readHead('tracks', fileName, 512));
           // Se pudo cancelar mientras se validaba: no se registra.
           if (controller.signal.aborted) throw new Error('cancelada');
           const record: DownloadRecord = {
             track,
-            fileName: fileNameFor(track),
-            bytes: file.size ?? 0,
+            fileName,
+            bytes,
             downloadedAt: Date.now(),
           };
           const failed = { ...get().failed };
@@ -121,9 +99,7 @@ export const useDownloads = create<DownloadsState>()(
           finish(track.id, { items: { ...get().items, [track.id]: record }, failed });
           void saveCover(track);
         } catch (err) {
-          try {
-            if (dest.exists) dest.delete();
-          } catch {}
+          await fileStore.remove('tracks', fileName).catch(() => {});
           if (controller.signal.aborted) return finish(track.id);
           const message = err instanceof Error ? err.message : 'Error de descarga';
           finish(track.id, { failed: { ...get().failed, [track.id]: message } });
@@ -171,25 +147,24 @@ export const useDownloads = create<DownloadsState>()(
           for (const id of ids) {
             const record = items[id];
             if (!record) continue;
-            try {
-              const file = new File(tracksDir(), record.fileName);
-              if (file.exists) file.delete();
-            } catch {}
+            void fileStore.remove('tracks', record.fileName).catch(() => {});
             delete items[id];
           }
           set({ items });
         },
-        reconcile: () => {
+        reconcile: async () => {
           // Si el sistema o el usuario borró archivos, se limpian los registros huérfanos.
-          const items = { ...get().items };
-          let changed = false;
-          for (const [id, record] of Object.entries(items)) {
-            if (!new File(tracksDir(), record.fileName).exists) {
-              delete items[id];
-              changed = true;
-            }
-          }
-          if (changed) set({ items });
+          const records = Object.entries(get().items);
+          const missing = await Promise.all(
+            records.map(async ([id, r]) => ((await fileStore.exists('tracks', r.fileName).catch(() => true)) ? null : id)),
+          );
+          const gone = missing.filter((id): id is string => id !== null);
+          if (gone.length === 0) return;
+          set((s) => {
+            const items = { ...s.items };
+            for (const id of gone) delete items[id];
+            return { items };
+          });
         },
       };
     },
@@ -203,11 +178,11 @@ export const useDownloads = create<DownloadsState>()(
 
 export function localTrackUri(id: string): string | null {
   const record = useDownloads.getState().items[id];
-  return record ? new File(tracksDir(), record.fileName).uri : null;
+  return record ? fileStore.uri('tracks', record.fileName) : null;
 }
 
 export function coverFileUri(fileName: string): string {
-  return new File(coversDir(), fileName).uri;
+  return fileStore.uri('covers', fileName);
 }
 
 export function localCoverUri(albumId: string): string | null {
@@ -220,6 +195,9 @@ export function useCoverUri(albumId: string, remote: string | null): string | nu
   const fileName = useDownloads((s) => s.covers[albumId]);
   return fileName ? coverFileUri(fileName) : remote;
 }
+
+/** En un navegador normal no hay dónde guardar archivos: se ocultan las descargas. */
+export const downloadsSupported = fileStore.supported;
 
 export const useIsDownloaded = (id: string) => useDownloads((s) => Boolean(s.items[id]));
 export const useDownloadProgress = (id: string) => useDownloads((s) => s.progress[id]);
