@@ -1,56 +1,54 @@
-# Welcome to your Expo app 👋
+# Sonaura
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**Tu música, tu energía.** Reproductor MP3 para Android e iOS que lee la música directamente de una
+carpeta pública de Google Drive, con favoritos y escucha sin conexión.
 
-## Get started
+- Catálogo en vivo desde Drive: cada subcarpeta es un álbum y su `cover.*` es la portada; los MP3
+  sueltos de la raíz forman el álbum «Sueltos».
+- Streaming con barra de progreso, cola, aleatorio, repetir (todo / una) y temporizador de apagado.
+- Sigue sonando con la pantalla apagada, con controles en la notificación y en la pantalla de bloqueo.
+- Favoritos que se guardan en el dispositivo.
+- Descarga de canciones o álbumes completos para escucharlos en modo avión.
+- Búsqueda, mezcla aleatoria de toda la biblioteca y reanudación de la última sesión.
 
-1. Install dependencies
+## Stack
 
-   ```bash
-   npm install
-   ```
+Expo SDK 57 · React Native 0.86 · TypeScript · expo-router · expo-audio · expo-file-system · zustand.
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Desarrollo
 
 ```bash
-npm run reset-project
+npm install
+npm run android        # build de desarrollo en un emulador o dispositivo Android
+npm test               # tests (cola de reproducción y catálogo de Drive)
+npm run typecheck
+npm run lint
+npm run icons          # regenera iconos y splash desde assets/brand/icon.svg
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+La app usa módulos nativos (audio en segundo plano, archivos), así que **no funciona en Expo Go**:
+hace falta una build de desarrollo (`npm run android`, o `npx eas-cli@latest build --profile development`).
 
-### Other setup steps
+iOS no se puede compilar en Windows: se usa EAS Build en la nube (requiere cuenta Apple Developer).
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Configuración
 
-## Learn more
+Copia `.env.example` a `.env.local` si necesitas cambiar algo:
 
-To learn more about developing your project with Expo, look at the following resources:
+| Variable | Para qué |
+|---|---|
+| `EXPO_PUBLIC_DRIVE_FOLDER_ID` | Carpeta pública de Drive con la música. |
+| `EXPO_PUBLIC_DRIVE_API_KEY` | Opcional. Usa la Drive API v3 en lugar de la vista pública embebida. |
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+La carpeta debe estar compartida como «Cualquier persona con el enlace».
 
-## Join the community
+## Estructura
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```
+src/app/          pantallas (expo-router): Inicio, Favoritos, Sin conexión, Álbum, Reproductor
+src/catalog/      lectura de la carpeta de Drive → álbumes y pistas
+src/player/       cola (funciones puras) y motor de reproducción
+src/state/        biblioteca, favoritos, descargas y red (zustand persistido)
+src/components/   UI reutilizable
+assets/brand/     SVG fuente del icono
+```
