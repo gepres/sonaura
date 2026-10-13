@@ -13,7 +13,7 @@ import { SeekBar } from '@/components/SeekBar';
 import { EmptyState, SectionTitle } from '@/components/ui';
 import { upcomingIds } from '@/player/queue';
 import { useCurrentTrack, usePlayer } from '@/player/store';
-import { localCoverUri } from '@/state/downloads';
+import { useCoverUri } from '@/state/downloads';
 import { auraGradient, colors, radius, space, typo } from '@/theme';
 
 const SLEEP_OPTIONS = [15, 30, 60];
@@ -82,6 +82,16 @@ export default function PlayerScreen() {
   const queue = usePlayer((s) => s.queue);
   const queueTracks = usePlayer((s) => s.queueTracks);
   const notice = usePlayer((s) => s.notice);
+  // Las acciones del store son estables: se seleccionan como hooks, no con getState() en render.
+  const togglePlay = usePlayer((s) => s.togglePlay);
+  const next = usePlayer((s) => s.next);
+  const previous = usePlayer((s) => s.previous);
+  const seekTo = usePlayer((s) => s.seekTo);
+  const skipTo = usePlayer((s) => s.skipTo);
+  const toggleShuffle = usePlayer((s) => s.toggleShuffle);
+  const cycleRepeat = usePlayer((s) => s.cycleRepeat);
+  const clearNotice = usePlayer((s) => s.clearNotice);
+  const cover = useCoverUri(track?.albumId ?? '', track?.artworkUrl ?? null);
 
   if (!track || !queue) {
     return (
@@ -92,11 +102,9 @@ export default function PlayerScreen() {
   }
 
   const artSize = Math.min(width - space.xl * 2, 360);
-  const cover = localCoverUri(track.albumId) ?? track.artworkUrl;
   const upcoming = upcomingIds(queue, 20)
     .map((id) => queueTracks[id])
     .filter(Boolean);
-  const p = usePlayer.getState();
 
   return (
     <View style={styles.screen}>
@@ -135,25 +143,25 @@ export default function PlayerScreen() {
             <FavoriteButton track={track} size={28} />
           </View>
 
-          <SeekBar position={position} duration={duration} onSeek={(s) => p.seekTo(s)} />
+          <SeekBar position={position} duration={duration} onSeek={seekTo} />
 
           <View style={styles.controls}>
-            <Pressable onPress={p.toggleShuffle} hitSlop={10} accessibilityRole="button" accessibilityLabel="Aleatorio" accessibilityState={{ selected: shuffle }}>
+            <Pressable onPress={toggleShuffle} hitSlop={10} accessibilityRole="button" accessibilityLabel="Aleatorio" accessibilityState={{ selected: shuffle }}>
               <Icon name="shuffle" size={24} color={shuffle ? colors.magenta : colors.textMuted} />
             </Pressable>
-            <Pressable onPress={p.previous} hitSlop={10} accessibilityRole="button" accessibilityLabel="Anterior">
+            <Pressable onPress={previous} hitSlop={10} accessibilityRole="button" accessibilityLabel="Anterior">
               <Icon name="previous" size={34} />
             </Pressable>
-            <Pressable onPress={p.togglePlay} accessibilityRole="button" accessibilityLabel={playing ? 'Pausar' : 'Reproducir'}>
+            <Pressable onPress={togglePlay} accessibilityRole="button" accessibilityLabel={playing ? 'Pausar' : 'Reproducir'}>
               <LinearGradient colors={auraGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.playBtn}>
                 {buffering ? <ActivityIndicator color="#1A0B2E" /> : <Icon name={playing ? 'pause' : 'play'} size={36} color="#1A0B2E" />}
               </LinearGradient>
             </Pressable>
-            <Pressable onPress={p.next} hitSlop={10} accessibilityRole="button" accessibilityLabel="Siguiente">
+            <Pressable onPress={next} hitSlop={10} accessibilityRole="button" accessibilityLabel="Siguiente">
               <Icon name="next" size={34} />
             </Pressable>
             <Pressable
-              onPress={p.cycleRepeat}
+              onPress={cycleRepeat}
               hitSlop={10}
               accessibilityRole="button"
               accessibilityLabel={repeat === 'one' ? 'Repetir una' : repeat === 'all' ? 'Repetir todo' : 'Repetir desactivado'}>
@@ -162,7 +170,7 @@ export default function PlayerScreen() {
           </View>
 
           {notice ? (
-            <Text style={styles.notice} onPress={p.clearNotice}>
+            <Text style={styles.notice} onPress={clearNotice}>
               {notice}
             </Text>
           ) : null}
@@ -176,7 +184,7 @@ export default function PlayerScreen() {
             {upcoming.map((t, i) => (
               <Pressable
                 key={`${t.id}-${i}`}
-                onPress={() => p.skipTo(queue.position + i + 1)}
+                onPress={() => skipTo(queue.position + i + 1)}
                 style={({ pressed }) => [styles.upNext, pressed && { backgroundColor: colors.surfacePressed }]}>
                 <AlbumArt albumId={t.albumId} coverUrl={t.artworkUrl} title={t.albumTitle} size={40} rounded={6} />
                 <View style={{ flex: 1 }}>

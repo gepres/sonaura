@@ -13,8 +13,15 @@ let started = false;
 export function startNetworkWatcher() {
   if (started) return;
   started = true;
+  let gotEvent = false;
+  addNetworkStateListener((s) => {
+    gotEvent = true;
+    useNetwork.setState({ online: isOnline(s) });
+  });
+  // La consulta inicial puede resolver después de un evento más nuevo: entonces se descarta.
   getNetworkStateAsync()
-    .then((s) => useNetwork.setState({ online: isOnline(s) }))
+    .then((s) => {
+      if (!gotEvent) useNetwork.setState({ online: isOnline(s) });
+    })
     .catch(() => {});
-  addNetworkStateListener((s) => useNetwork.setState({ online: isOnline(s) }));
 }

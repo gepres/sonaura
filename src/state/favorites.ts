@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { Track } from '@/catalog';
-import { persistStorage } from '@/state/storage';
+import { safeStorage } from '@/state/storage';
 
 type Favorite = { track: Track; addedAt: number };
 
@@ -24,7 +24,7 @@ export const useFavorites = create<FavoritesState>()(
           return { items };
         }),
     }),
-    { name: 'sonaura.favorites.v1', storage: persistStorage },
+    { name: 'sonaura.favorites.v1', storage: safeStorage() },
   ),
 );
 

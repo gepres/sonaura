@@ -17,10 +17,18 @@ const theme = {
   colors: { ...DarkTheme.colors, background: colors.bg, card: colors.bgElevated, primary: colors.magenta },
 };
 
-function whenHydrated(store: { persist: { hasHydrated: () => boolean; onFinishHydration: (fn: () => void) => () => void } }) {
+type Persisted = { persist: { hasHydrated: () => boolean; onFinishHydration: (fn: () => void) => () => void } };
+
+/**
+ * Resuelve al terminar la hidratación. safeStorage ya convierte los fallos de lectura en
+ * estado vacío; el plazo máximo es la última red para no dejar la app en el splash.
+ */
+function whenHydrated(store: Persisted, timeoutMs = 3000) {
   return new Promise<void>((resolve) => {
     if (store.persist.hasHydrated()) return resolve();
+    const timer = setTimeout(resolve, timeoutMs);
     const unsub = store.persist.onFinishHydration(() => {
+      clearTimeout(timer);
       unsub();
       resolve();
     });

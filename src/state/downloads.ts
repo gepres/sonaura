@@ -1,9 +1,9 @@
-import { Directory, File, Paths } from 'expo-file-system';
+import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { Track } from '@/catalog';
-import { persistStorage } from '@/state/storage';
+import { safeStorage } from '@/state/storage';
 
 type DownloadRecord = {
   track: Track;
@@ -45,15 +45,21 @@ function fileNameFor(track: Track): string {
   return `${track.id}.${ext}`;
 }
 
-/** Drive devuelve una página HTML (no el audio) cuando limita la descarga de un archivo. */
-async function assertIsAudio(file: File) {
-  const size = file.size ?? 0;
-  if (size === 0) throw new Error('Descarga vacía');
-  if (size < 256 * 1024) {
-    const head = (await file.text()).slice(0, 512).toLowerCase();
-    if (head.includes('<html') || head.includes('<!doctype')) {
-      throw new Error('Drive limitó la descarga, inténtalo más tarde');
-    }
+/**
+ * Drive devuelve una página HTML (no el audio) cuando limita la descarga de un archivo.
+ * Se miran solo los primeros bytes, sin decodificar el binario como texto.
+ */
+function assertIsAudio(file: File) {
+  if ((file.size ?? 0) === 0) throw new Error('Descarga vacía');
+  const handle = file.open(FileMode.ReadOnly);
+  let head: string;
+  try {
+    head = String.fromCharCode(...handle.readBytes(512)).trimStart().toLowerCase();
+  } finally {
+    handle.close();
+  }
+  if (head.startsWith('<') && (head.includes('<html') || head.includes('<!doctype'))) {
+    throw new Error('Drive limitó la descarga, inténtalo más tarde');
   }
 }
 
@@ -101,7 +107,9 @@ export const useDownloads = create<DownloadsState>()(
               if (totalBytes > 0) setProgress(track.id, bytesWritten / totalBytes);
             },
           });
-          await assertIsAudio(file);
+          assertIsAudio(file);
+          // Se pudo cancelar mientras se validaba: no se registra.
+          if (controller.signal.aborted) throw new Error('cancelada');
           const record: DownloadRecord = {
             track,
             fileName: fileNameFor(track),
@@ -187,7 +195,7 @@ export const useDownloads = create<DownloadsState>()(
     },
     {
       name: 'sonaura.downloads.v1',
-      storage: persistStorage,
+      storage: safeStorage(),
       partialize: (s) => ({ items: s.items, covers: s.covers }),
     },
   ),
@@ -198,9 +206,19 @@ export function localTrackUri(id: string): string | null {
   return record ? new File(tracksDir(), record.fileName).uri : null;
 }
 
+export function coverFileUri(fileName: string): string {
+  return new File(coversDir(), fileName).uri;
+}
+
 export function localCoverUri(albumId: string): string | null {
   const fileName = useDownloads.getState().covers[albumId];
-  return fileName ? new File(coversDir(), fileName).uri : null;
+  return fileName ? coverFileUri(fileName) : null;
+}
+
+/** Portada a mostrar: la guardada offline si existe. Hook, para que React vea el cambio. */
+export function useCoverUri(albumId: string, remote: string | null): string | null {
+  const fileName = useDownloads((s) => s.covers[albumId]);
+  return fileName ? coverFileUri(fileName) : remote;
 }
 
 export const useIsDownloaded = (id: string) => useDownloads((s) => Boolean(s.items[id]));

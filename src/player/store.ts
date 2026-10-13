@@ -12,7 +12,7 @@ import { persist } from 'zustand/middleware';
 import type { Track } from '@/catalog';
 import { localCoverUri, localTrackUri } from '@/state/downloads';
 import { useNetwork } from '@/state/network';
-import { persistStorage } from '@/state/storage';
+import { safeStorage } from '@/state/storage';
 
 import {
   createQueue,
@@ -31,8 +31,11 @@ type PlayerState = {
   queueTracks: Record<string, Track>;
   shuffle: boolean;
   repeat: RepeatMode;
+  /** Intención de reproducir (lo que pidió el usuario), no solo el estado nativo instantáneo. */
   playing: boolean;
   buffering: boolean;
+  /** La fuente actual está preparada en el reproductor nativo. */
+  loaded: boolean;
   position: number;
   duration: number;
   /** Pista cargada en el reproductor nativo; null tras reabrir la app. */
@@ -124,6 +127,7 @@ export const usePlayer = create<PlayerState>()(
         if (!state.queue) return;
         let queue: Queue = { ...state.queue, position };
         let track = trackAt(state, queue);
+        let seek = seekSeconds;
         let guard = queue.order.length;
         while (track && !isPlayable(track) && guard-- > 0) {
           const nextPos = nextPosition(queue, state.repeat === 'one' ? 'all' : state.repeat, false);
@@ -133,6 +137,8 @@ export const usePlayer = create<PlayerState>()(
           }
           queue = { ...queue, position: nextPos };
           track = trackAt(state, queue);
+          // La posición guardada era de otra pista.
+          seek = 0;
         }
         if (!track || !isPlayable(track)) {
           audio().pause();
@@ -140,8 +146,10 @@ export const usePlayer = create<PlayerState>()(
           return;
         }
         const p = audio();
+        // replace() conserva el estado de reproducción: si no hay autoplay hay que pausar antes.
+        if (!autoplay) p.pause();
         p.replace({ uri: localTrackUri(track.id) ?? track.streamUrl, name: track.title });
-        if (seekSeconds > 0) void p.seekTo(seekSeconds);
+        if (seek > 0) void p.seekTo(seek);
         if (autoplay) {
           p.play();
           void ensureNotificationPermission();
@@ -149,11 +157,13 @@ export const usePlayer = create<PlayerState>()(
         set({
           queue,
           loadedTrackId: track.id,
-          position: seekSeconds,
+          position: seek,
           duration: 0,
           playing: autoplay,
           buffering: autoplay,
-          resumeAt: seekSeconds,
+          loaded: false,
+          resumeAt: seek,
+          notice: null,
         });
         showOnLockScreen(track);
       };
@@ -165,6 +175,7 @@ export const usePlayer = create<PlayerState>()(
         repeat: 'off',
         playing: false,
         buffering: false,
+        loaded: false,
         position: 0,
         duration: 0,
         loadedTrackId: null,
@@ -188,10 +199,12 @@ export const usePlayer = create<PlayerState>()(
         },
 
         togglePlay: () => {
-          const { queue, playing, loadedTrackId, resumeAt } = get();
+          const { queue, playing, loadedTrackId, resumeAt, loaded, position } = get();
           if (!queue) return;
-          if (loadedTrackId !== currentTrackId(queue)) {
-            loadAt(queue.position, true, resumeAt);
+          const sameTrack = loadedTrackId === currentTrackId(queue);
+          // Sin pista cargada (sesión restaurada) o con la fuente caída: se vuelve a preparar.
+          if (!sameTrack || (!playing && !loaded)) {
+            loadAt(queue.position, true, sameTrack ? position : resumeAt);
             return;
           }
           const p = audio();
@@ -249,7 +262,8 @@ export const usePlayer = create<PlayerState>()(
     },
     {
       name: 'sonaura.player.v1',
-      storage: persistStorage,
+      // La posición cambia cada 500 ms: se agrupan las escrituras.
+      storage: safeStorage(2000),
       partialize: (s) => ({
         queue: s.queue,
         queueTracks: s.queueTracks,
@@ -261,8 +275,26 @@ export const usePlayer = create<PlayerState>()(
   ),
 );
 
-function onStatus(status: AudioStatus) {
+/** En Android, `onPlayerError` emite un status que solo trae `error`. */
+type StatusEvent = Partial<AudioStatus> & { error?: string | null };
+
+function onStatus(status: StatusEvent) {
   const state = usePlayer.getState();
+
+  if (status.error) {
+    // ExoPlayer necesita volver a preparar la fuente tras un error: el próximo play recarga.
+    usePlayer.setState({
+      playing: false,
+      buffering: false,
+      loaded: false,
+      loadedTrackId: null,
+      resumeAt: state.position,
+      notice: useNetwork.getState().online
+        ? 'No se pudo reproducir esta canción. Toca play para reintentar.'
+        : 'Sin conexión: descarga pistas para escucharlas offline.',
+    });
+    return;
+  }
 
   if (state.sleepAt) {
     const left = state.sleepAt - Date.now();
@@ -292,14 +324,21 @@ function onStatus(status: AudioStatus) {
     return;
   }
 
+  const nativePlaying = Boolean(status.playing);
+  const loaded = Boolean(status.isLoaded);
+  // iOS informa playing=false mientras espera datos, y la fuente nueva tarda en cargar:
+  // eso no es una pausa del usuario, así que se conserva la intención.
+  const waiting = !nativePlaying && (Boolean(status.isBuffering) || !loaded);
+  const position = typeof status.currentTime === 'number' && Number.isFinite(status.currentTime) ? status.currentTime : state.position;
   const patch: Partial<PlayerState> = {
-    playing: status.playing,
-    buffering: status.isBuffering,
-    position: status.currentTime,
-    duration: status.duration > 0 ? status.duration : state.duration,
+    playing: nativePlaying || (waiting && state.playing),
+    buffering: Boolean(status.isBuffering) || (state.playing && !loaded),
+    loaded,
+    position,
+    duration: status.duration && status.duration > 0 ? status.duration : state.duration,
   };
   // Se guarda la posición cada ~5 s para reanudar donde se quedó.
-  if (Math.abs(status.currentTime - state.resumeAt) >= 5) patch.resumeAt = status.currentTime;
+  if (Math.abs(position - state.resumeAt) >= 5) patch.resumeAt = position;
   usePlayer.setState(patch);
 }
 

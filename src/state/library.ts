@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 
 import { buildLibrary, CatalogError, createDefaultSource, type Library, type Track } from '@/catalog';
 import { DRIVE_FOLDER_ID } from '@/config';
-import { persistStorage } from '@/state/storage';
+import { safeStorage } from '@/state/storage';
 
 type LibraryState = {
   library: Library | null;
@@ -49,10 +49,12 @@ export const useLibrary = create<LibraryState>()(
     }),
     {
       name: 'sonaura.library.v1',
-      storage: persistStorage,
+      storage: safeStorage(),
       partialize: (s) => ({ library: s.library }),
-      onRehydrateStorage: () => (state) => {
-        if (state) state.tracksById = indexTracks(state.library);
+      // El índice se deriva antes de publicar el estado hidratado, no mutándolo después.
+      merge: (persisted, current) => {
+        const library = (persisted as Partial<LibraryState> | undefined)?.library ?? current.library;
+        return { ...current, library, tracksById: indexTracks(library) };
       },
     },
   ),

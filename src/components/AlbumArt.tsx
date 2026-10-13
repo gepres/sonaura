@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text } from 'react-native';
 
-import { localCoverUri, useDownloads } from '@/state/downloads';
+import { useCoverUri } from '@/state/downloads';
 import { colors, radius } from '@/theme';
 
 type Props = {
@@ -28,9 +28,7 @@ function paletteFor(id: string): [string, string] {
 }
 
 export function AlbumArt({ albumId, coverUrl, title, size, rounded = radius.md }: Props) {
-  // Re-render cuando se guarda la portada offline.
-  useDownloads((s) => s.covers[albumId]);
-  const source = localCoverUri(albumId) ?? coverUrl;
+  const source = useCoverUri(albumId, coverUrl);
   const box = { width: size, height: size, borderRadius: rounded };
 
   if (source) {
