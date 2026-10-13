@@ -9,16 +9,21 @@ type Props = { position: number; duration: number; onSeek: (seconds: number) => 
 
 /** Barra de progreso arrastrable; mientras se arrastra muestra la posición objetivo. */
 export function SeekBar({ position, duration, onSeek }: Props) {
-  const [width, setWidth] = useState(1);
+  // 0 = aún sin medir: un toque antes de conocer el ancho no debe saltar a ninguna parte
+  // (con un ancho supuesto de 1 px cualquier toque contaba como 100 % y saltaba al final).
+  const [width, setWidth] = useState(0);
   const [scrub, setScrub] = useState<number | null>(null);
   const shown = scrub ?? position;
   const ratio = duration > 0 ? Math.min(Math.max(shown / duration, 0), 1) : 0;
 
   const toSeconds = (x: number) => Math.min(Math.max(x / width, 0), 1) * duration;
-  const update = (x: number) => setScrub(toSeconds(x));
+  const measured = width > 1 && duration > 0;
+  const update = (x: number) => {
+    if (measured) setScrub(toSeconds(x));
+  };
   const commit = (x: number) => {
     setScrub(null);
-    if (duration > 0) onSeek(toSeconds(x));
+    if (measured) onSeek(toSeconds(x));
   };
 
   // Arrastre horizontal para buscar (el vertical se deja al scroll) y toque para saltar.
@@ -43,7 +48,7 @@ export function SeekBar({ position, duration, onSeek }: Props) {
       <GestureDetector gesture={Gesture.Race(pan, tap)}>
         <View
           style={styles.hit}
-          onLayout={(e: LayoutChangeEvent) => setWidth(Math.max(e.nativeEvent.layout.width, 1))}
+          onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
           accessibilityRole="adjustable"
           accessibilityLabel="Posición de reproducción"
           aria-valuemin={0}
