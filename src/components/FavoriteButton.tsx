@@ -1,9 +1,9 @@
-import * as Haptics from 'expo-haptics';
 import { Pressable, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
 
 import type { Track } from '@/catalog';
 import { Icon } from '@/components/Icon';
+import { tapFeedback } from '@/lib/haptics';
 import { useFavorites, useIsFavorite } from '@/state/favorites';
 import { colors } from '@/theme';
 
@@ -14,7 +14,7 @@ export function FavoriteButton({ track, size = 22 }: { track: Track; size?: numb
 
   const onPress = () => {
     if (!favorite) scale.set(withSequence(withSpring(1.35, { damping: 6 }), withSpring(1)));
-    void Haptics.selectionAsync();
+    tapFeedback();
     useFavorites.getState().toggle(track);
   };
 

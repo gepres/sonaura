@@ -97,7 +97,8 @@ export function createApiSource(apiKey: string, fetchImpl: typeof fetch = fetch)
   };
 }
 
-export function createDefaultSource(): FolderSource {
+/** `fetchImpl` permite usar el fetch de la plataforma (en escritorio, el de Tauri sin CORS). */
+export function createDefaultSource(fetchImpl: typeof fetch = fetch): FolderSource {
   const apiKey = process.env.EXPO_PUBLIC_DRIVE_API_KEY?.trim();
-  return apiKey ? createApiSource(apiKey) : createEmbeddedSource();
+  return apiKey ? createApiSource(apiKey, fetchImpl) : createEmbeddedSource(fetchImpl);
 }

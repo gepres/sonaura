@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '@/components/Icon';
 import { MiniPlayer } from '@/components/MiniPlayer';
+import { contentFrame } from '@/lib/layout';
 import { colors, space } from '@/theme';
 
 const TABS: { name: string; label: string; icon: IconName }[] = [
@@ -19,8 +20,10 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
 
   return (
     <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, space.sm) }]}>
-      <MiniPlayer />
-      <View style={styles.row}>
+      <View style={contentFrame}>
+        <MiniPlayer />
+      </View>
+      <View style={[styles.row, contentFrame, { maxWidth: 560 }]}>
         {TABS.map((tab) => {
           const route = state.routes.find((r) => r.name === tab.name);
           if (!route) return null;

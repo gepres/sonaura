@@ -27,8 +27,12 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "output": "single",
+      "favicon": "./assets/images/favicon.png",
+      "name": "Sonaura",
+      "shortName": "Sonaura",
+      "backgroundColor": "#0A0717",
+      "themeColor": "#0A0717"
     },
     "plugins": [
       "expo-router",

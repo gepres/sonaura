@@ -1,15 +1,17 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Alert, FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/AlbumArt';
 import { Icon } from '@/components/Icon';
 import { TrackRow } from '@/components/TrackRow';
 import { EmptyState, PillButton, StatusBanner } from '@/components/ui';
+import { confirmAction } from '@/lib/confirm';
 import { pluralize } from '@/lib/format';
+import { contentFrame } from '@/lib/layout';
 import { playAll, playFrom } from '@/player/actions';
-import { useDownloads } from '@/state/downloads';
+import { downloadsSupported, useDownloads } from '@/state/downloads';
 import { useAlbum } from '@/state/library';
 import { colors, space, typo } from '@/theme';
 
@@ -35,10 +37,9 @@ export default function AlbumScreen() {
     if (inFlight) {
       album.tracks.forEach((t) => store.cancel(t.id));
     } else if (allDownloaded) {
-      Alert.alert('Quitar descargas', `Se liberará el espacio de "${album.title}".`, [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Quitar', style: 'destructive', onPress: () => store.remove(album.tracks.map((t) => t.id)) },
-      ]);
+      void confirmAction('Quitar descargas', `Se liberará el espacio de "${album.title}".`, 'Quitar').then(
+        (ok) => ok && store.remove(album.tracks.map((t) => t.id)),
+      );
     } else {
       store.enqueue(album.tracks);
     }
@@ -52,7 +53,7 @@ export default function AlbumScreen() {
       style={styles.screen}
       data={album.tracks}
       keyExtractor={(t) => t.id}
-      contentContainerStyle={{ paddingBottom: space.xxl }}
+      contentContainerStyle={[contentFrame, { paddingBottom: space.xxl }]}
       ListHeaderComponent={
         <View>
           <LinearGradient
@@ -84,6 +85,7 @@ export default function AlbumScreen() {
             <View style={{ flex: 1 }}>
               <PillButton label="Aleatorio" icon="shuffle" variant="ghost" onPress={() => playAll(album.tracks, true)} />
             </View>
+            {downloadsSupported ? (
             <Pressable
               onPress={toggleAlbumDownload}
               style={styles.dl}
@@ -95,6 +97,7 @@ export default function AlbumScreen() {
                 color={allDownloaded ? colors.success : inFlight ? colors.amber : colors.text}
               />
             </Pressable>
+            ) : null}
           </View>
           <StatusBanner />
         </View>

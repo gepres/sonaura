@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +21,7 @@ import { TrackRow } from '@/components/TrackRow';
 import { EmptyState, PillButton, SectionTitle, StatusBanner } from '@/components/ui';
 import { APP_NAME } from '@/config';
 import { pluralize } from '@/lib/format';
+import { contentFrame, useAlbumGrid } from '@/lib/layout';
 import { playAll, playFrom } from '@/player/actions';
 import { useDownloads } from '@/state/downloads';
 import { useLibrary } from '@/state/library';
@@ -60,7 +60,6 @@ function AlbumCard({ album, size }: { album: Album; size: number }) {
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const library = useLibrary((s) => s.library);
   const loading = useLibrary((s) => s.loading);
   const error = useLibrary((s) => s.error);
@@ -77,7 +76,8 @@ export default function HomeScreen() {
     return allTracks.filter((t) => normalize(`${t.title} ${t.albumTitle}`).includes(q));
   }, [allTracks, query]);
 
-  const cardSize = (Math.min(width, 700) - space.lg * 2 - space.md) / 2;
+  // 2 columnas en el teléfono, hasta 5 en una ventana de escritorio ancha.
+  const { cardSize, gap } = useAlbumGrid();
   const refresh = () => void useLibrary.getState().refresh();
   const onPull = async () => {
     setPulling(true);
@@ -90,7 +90,7 @@ export default function HomeScreen() {
   return (
     <ScrollView
       style={styles.screen}
-      contentContainerStyle={{ paddingTop: insets.top + space.md, paddingBottom: space.xxl }}
+      contentContainerStyle={[contentFrame, { paddingTop: insets.top + space.md, paddingBottom: space.xxl }]}
       keyboardShouldPersistTaps="handled"
       refreshControl={
         <RefreshControl
@@ -175,7 +175,7 @@ export default function HomeScreen() {
               </Pressable>
 
               <SectionTitle>Álbumes</SectionTitle>
-              <View style={styles.grid}>
+              <View style={[styles.grid, { gap }]}>
                 {library.albums.map((album) => (
                   <AlbumCard key={album.id} album={album} size={cardSize} />
                 ))}
@@ -217,6 +217,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, paddingHorizontal: space.lg, rowGap: space.xl },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: space.lg, rowGap: space.xl },
   cardTitle: { marginTop: space.sm },
 });

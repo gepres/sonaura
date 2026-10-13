@@ -29,15 +29,15 @@ const ICONS = {
   search: { ios: 'magnifyingglass', android: 'search' },
   queue: { ios: 'list.bullet', android: 'queue_music' },
   cancel: { ios: 'xmark.circle.fill', android: 'cancel' },
-} as const satisfies Record<string, SymbolViewProps['name']>;
+} as const satisfies Record<string, { ios: SymbolViewProps['name'] & string; android: string }>;
 
 export type IconName = keyof typeof ICONS;
 
 type Props = { name: IconName; size?: number; color?: string };
 
 export function Icon({ name, size = 24, color = colors.text }: Props) {
-  // Material Symbols en Android solo trae la variante de contorno: el corazón relleno se dibuja.
-  if (name === 'heartFill' && Platform.OS === 'android') {
+  // Material Symbols (Android y web) solo trae la variante de contorno: el corazón relleno se dibuja.
+  if (name === 'heartFill' && Platform.OS !== 'ios') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
         <Path
@@ -47,5 +47,7 @@ export function Icon({ name, size = 24, color = colors.text }: Props) {
       </Svg>
     );
   }
-  return <SymbolView name={ICONS[name]} size={size} tintColor={color} />;
+  const icon = ICONS[name];
+  // En web (escritorio) se usan los mismos Material Symbols que en Android.
+  return <SymbolView name={{ ...icon, web: icon.android }} size={size} tintColor={color} />;
 }

@@ -11,6 +11,7 @@ import { FavoriteButton } from '@/components/FavoriteButton';
 import { Icon } from '@/components/Icon';
 import { SeekBar } from '@/components/SeekBar';
 import { EmptyState, SectionTitle } from '@/components/ui';
+import { contentFrame } from '@/lib/layout';
 import { upcomingIds } from '@/player/queue';
 import { useCurrentTrack, usePlayer } from '@/player/store';
 import { useCoverUri } from '@/state/downloads';
@@ -101,7 +102,8 @@ export default function PlayerScreen() {
     );
   }
 
-  const artSize = Math.min(width - space.xl * 2, 360);
+  // En escritorio la portada crece con la ventana, sin pasarse.
+  const artSize = Math.min(width - space.xl * 2, width > 900 ? 420 : 360);
   const upcoming = upcomingIds(queue, 20)
     .map((id) => queueTracks[id])
     .filter(Boolean);
@@ -111,7 +113,8 @@ export default function PlayerScreen() {
       {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} blurRadius={60} contentFit="cover" /> : null}
       <LinearGradient colors={['rgba(10,7,23,0.55)', 'rgba(10,7,23,0.92)', colors.bg]} style={StyleSheet.absoluteFill} />
 
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + space.xxl }}>
+      <ScrollView
+        contentContainerStyle={[contentFrame, { maxWidth: 640, paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + space.xxl }]}>
         <View style={styles.topBar}>
           <Pressable onPress={close} hitSlop={12} accessibilityRole="button" accessibilityLabel="Cerrar reproductor">
             <Icon name="chevronDown" size={28} />

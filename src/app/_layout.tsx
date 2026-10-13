@@ -1,11 +1,14 @@
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { useDesktopShortcuts } from '@/lib/useDesktopShortcuts';
 import { initPlayer } from '@/player/store';
 import { useDownloads } from '@/state/downloads';
+import { fileStore } from '@/state/fileStore';
 import { useLibrary } from '@/state/library';
 import { startNetworkWatcher } from '@/state/network';
 import { colors } from '@/theme';
@@ -36,16 +39,27 @@ function whenHydrated(store: Persisted, timeoutMs = 3000) {
 }
 
 export default function RootLayout() {
+  const [ready, setReady] = useState(false);
+  useDesktopShortcuts();
+
   useEffect(() => {
     startNetworkWatcher();
     void initPlayer();
     // Se muestra lo guardado en cuanto está en memoria y se refresca desde Drive en segundo plano.
-    void Promise.all([whenHydrated(useLibrary), whenHydrated(useDownloads)]).then(() => {
+    // En escritorio, además, las rutas de las descargas se resuelven antes de pintar.
+    void Promise.all([
+      fileStore.init().catch(() => {}),
+      whenHydrated(useLibrary),
+      whenHydrated(useDownloads),
+    ]).then(() => {
+      setReady(true);
       void SplashScreen.hideAsync();
-      useDownloads.getState().reconcile();
+      void useDownloads.getState().reconcile();
       void useLibrary.getState().refresh();
     });
   }, []);
+
+  if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>

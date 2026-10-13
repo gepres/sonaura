@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TrackRow } from '@/components/TrackRow';
 import { EmptyState, PillButton, StatusBanner } from '@/components/ui';
 import { pluralize } from '@/lib/format';
+import { contentFrame } from '@/lib/layout';
 import { playAll, playFrom } from '@/player/actions';
 import { sortedFavorites, useFavorites } from '@/state/favorites';
 import { useLibrary } from '@/state/library';
@@ -23,7 +24,7 @@ export default function FavoritesScreen() {
       style={styles.screen}
       data={tracks}
       keyExtractor={(t) => t.id}
-      contentContainerStyle={{ paddingTop: insets.top + space.md, paddingBottom: space.xxl }}
+      contentContainerStyle={[contentFrame, { paddingTop: insets.top + space.md, paddingBottom: space.xxl }]}
       ListHeaderComponent={
         <View>
           <View style={styles.header}>

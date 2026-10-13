@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 
 import { buildLibrary, CatalogError, createDefaultSource, type Library, type Track } from '@/catalog';
 import { DRIVE_FOLDER_ID } from '@/config';
+import { appFetch } from '@/lib/http';
 import { safeStorage } from '@/state/storage';
 
 type LibraryState = {
@@ -39,7 +40,7 @@ export const useLibrary = create<LibraryState>()(
         if (get().loading) return;
         set({ loading: true, error: null });
         try {
-          const library = await buildLibrary(DRIVE_FOLDER_ID, createDefaultSource());
+          const library = await buildLibrary(DRIVE_FOLDER_ID, createDefaultSource(appFetch));
           set({ library, tracksById: indexTracks(library), loading: false });
         } catch (err) {
           // Se conserva la biblioteca en caché: la app sigue usable sin conexión.

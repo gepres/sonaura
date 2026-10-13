@@ -1,9 +1,10 @@
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
 import type { Track } from '@/catalog';
 import { Icon } from '@/components/Icon';
-import { useDownloadProgress, useDownloads, useIsDownloaded } from '@/state/downloads';
+import { confirmAction } from '@/lib/confirm';
+import { downloadsSupported, useDownloadProgress, useDownloads, useIsDownloaded } from '@/state/downloads';
 import { colors } from '@/theme';
 
 function ProgressRing({ value, size }: { value: number; size: number }) {
@@ -38,14 +39,15 @@ export function DownloadButton({ track, size = 22 }: { track: Track; size?: numb
     const { enqueue, cancel, remove } = useDownloads.getState();
     if (progress !== undefined) return cancel(track.id);
     if (downloaded) {
-      Alert.alert('Quitar descarga', `"${track.title}" dejará de estar disponible sin conexión.`, [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Quitar', style: 'destructive', onPress: () => remove([track.id]) },
-      ]);
+      void confirmAction('Quitar descarga', `"${track.title}" dejará de estar disponible sin conexión.`, 'Quitar').then(
+        (ok) => ok && remove([track.id]),
+      );
       return;
     }
     enqueue([track]);
   };
+
+  if (!downloadsSupported) return null;
 
   const label =
     progress !== undefined ? 'Cancelar descarga' : downloaded ? 'Quitar descarga' : 'Descargar para escuchar sin conexión';

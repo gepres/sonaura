@@ -10,6 +10,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { Track } from '@/catalog';
+import { streamSource } from '@/lib/streamSource';
 import { localCoverUri, localTrackUri } from '@/state/downloads';
 import { useNetwork } from '@/state/network';
 import { safeStorage } from '@/state/storage';
@@ -148,7 +149,7 @@ export const usePlayer = create<PlayerState>()(
         const p = audio();
         // replace() conserva el estado de reproducción: si no hay autoplay hay que pausar antes.
         if (!autoplay) p.pause();
-        p.replace({ uri: localTrackUri(track.id) ?? track.streamUrl, name: track.title });
+        p.replace({ uri: localTrackUri(track.id) ?? streamSource(track), name: track.title });
         if (seek > 0) void p.seekTo(seek);
         if (autoplay) {
           p.play();

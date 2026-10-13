@@ -1,12 +1,14 @@
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Track } from '@/catalog';
 import { TrackRow } from '@/components/TrackRow';
 import { EmptyState, PillButton, SectionTitle } from '@/components/ui';
+import { confirmAction } from '@/lib/confirm';
 import { formatBytes, pluralize } from '@/lib/format';
+import { contentFrame } from '@/lib/layout';
 import { playAll, playFrom } from '@/player/actions';
 import { totalDownloadedBytes, useDownloads } from '@/state/downloads';
 import { useLibrary } from '@/state/library';
@@ -31,17 +33,16 @@ export default function DownloadsScreen() {
   );
 
   const clearAll = () =>
-    Alert.alert('Borrar descargas', 'Se eliminarán todas las canciones guardadas en este dispositivo.', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Borrar todo', style: 'destructive', onPress: () => useDownloads.getState().remove(Object.keys(items)) },
-    ]);
+    void confirmAction('Borrar descargas', 'Se eliminarán todas las canciones guardadas en este dispositivo.', 'Borrar todo').then(
+      (ok) => ok && useDownloads.getState().remove(Object.keys(items)),
+    );
 
   return (
     <FlatList
       style={styles.screen}
       data={tracks}
       keyExtractor={(t) => t.id}
-      contentContainerStyle={{ paddingTop: insets.top + space.md, paddingBottom: space.xxl }}
+      contentContainerStyle={[contentFrame, { paddingTop: insets.top + space.md, paddingBottom: space.xxl }]}
       ListHeaderComponent={
         <View>
           <View style={styles.header}>
