@@ -13,6 +13,7 @@ import { SeekBar } from '@/components/SeekBar';
 import { EmptyState, SectionTitle } from '@/components/ui';
 import { VolumeControl } from '@/components/VolumeControl';
 import { contentFrame } from '@/lib/layout';
+import { playbackModeHint, repeatLabel } from '@/player/modes';
 import { upcomingIds } from '@/player/queue';
 import { useCurrentTrack, usePlayer } from '@/player/store';
 import { useCoverUri } from '@/state/downloads';
@@ -169,10 +170,14 @@ export default function PlayerScreen() {
               onPress={cycleRepeat}
               hitSlop={10}
               accessibilityRole="button"
-              accessibilityLabel={repeat === 'one' ? 'Repetir una' : repeat === 'all' ? 'Repetir todo' : 'Repetir desactivado'}>
+              accessibilityLabel={repeatLabel(repeat)}>
               <Icon name={repeat === 'one' ? 'repeatOne' : 'repeat'} size={24} color={repeat === 'off' ? colors.textMuted : colors.magenta} />
             </Pressable>
           </View>
+
+          {playbackModeHint(shuffle, repeat) ? (
+            <Text style={styles.modeHint}>{playbackModeHint(shuffle, repeat)}</Text>
+          ) : null}
 
           {notice ? (
             <Text style={styles.notice} onPress={clearNotice}>
@@ -232,6 +237,7 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   playBtn: { width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center' },
   notice: { ...typo.caption, color: colors.amber, textAlign: 'center' },
+  modeHint: { ...typo.caption, color: colors.magenta, textAlign: 'center', marginTop: -space.sm },
   volume: { alignItems: 'center' },
   sleepWrap: { alignItems: 'center', gap: space.sm },
   sleepBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.sm },

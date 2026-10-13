@@ -5,6 +5,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { AlbumArt } from '@/components/AlbumArt';
 import { Icon } from '@/components/Icon';
 import { VolumeControl } from '@/components/VolumeControl';
+import { repeatLabel } from '@/player/modes';
 import { useCurrentTrack, usePlayer } from '@/player/store';
 import { colors, MINI_PLAYER_HEIGHT, radius, space, typo } from '@/theme';
 
@@ -13,6 +14,9 @@ export function MiniPlayer() {
   const playing = usePlayer((s) => s.playing);
   const buffering = usePlayer((s) => s.buffering && s.playing);
   const ratio = usePlayer((s) => (s.duration > 0 ? Math.min(s.position / s.duration, 1) : 0));
+  const shuffle = usePlayer((s) => s.shuffle);
+  const repeat = usePlayer((s) => s.repeat);
+  const desktop = Platform.OS === 'web';
 
   if (!track) return null;
 
@@ -55,7 +59,29 @@ export function MiniPlayer() {
           accessibilityLabel="Siguiente">
           <Icon name="next" size={24} />
         </Pressable>
-        {Platform.OS === 'web' ? <VolumeControl width={100} /> : null}
+        {desktop ? (
+          <>
+            {/* En escritorio hay sitio: aleatorio y repetir también en la barra inferior. */}
+            <Pressable
+              onPress={() => usePlayer.getState().toggleShuffle()}
+              hitSlop={8}
+              style={styles.btn}
+              accessibilityRole="button"
+              accessibilityLabel="Aleatorio"
+              accessibilityState={{ selected: shuffle }}>
+              <Icon name="shuffle" size={20} color={shuffle ? colors.magenta : colors.textMuted} />
+            </Pressable>
+            <Pressable
+              onPress={() => usePlayer.getState().cycleRepeat()}
+              hitSlop={8}
+              style={styles.btn}
+              accessibilityRole="button"
+              accessibilityLabel={repeatLabel(repeat)}>
+              <Icon name={repeat === 'one' ? 'repeatOne' : 'repeat'} size={20} color={repeat === 'off' ? colors.textMuted : colors.magenta} />
+            </Pressable>
+            <VolumeControl width={100} />
+          </>
+        ) : null}
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${ratio * 100}%` }]} />
         </View>
