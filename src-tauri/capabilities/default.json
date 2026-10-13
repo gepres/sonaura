@@ -1,0 +1,22 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permisos mínimos de Sonaura: leer Drive, guardar descargas en la carpeta de la app y confirmar acciones.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://drive.google.com/*" },
+        { "url": "https://drive.usercontent.google.com/*" },
+        { "url": "https://www.googleapis.com/*" },
+        { "url": "https://*.googleusercontent.com/*" }
+      ]
+    },
+    "fs:default",
+    "fs:allow-appdata-read-recursive",
+    "fs:allow-appdata-write-recursive",
+    "dialog:default"
+  ]
+}

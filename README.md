@@ -45,6 +45,21 @@ JavaScript empaquetado, así que funciona sin Metro. Para uno más ligero solo p
 Va firmado con la clave de depuración de la plantilla: sirve para instalarlo en un teléfono (activando
 «Instalar apps desconocidas»), **no para Play Store**. Para la tienda hace falta una clave propia o EAS.
 
+## Escritorio (Windows)
+
+La misma app, exportada a web con Expo y envuelta en una ventana nativa con [Tauri v2](https://tauri.app)
+(WebView2). Requisitos: Rust (`rustup`) y las herramientas de C++ de Visual Studio.
+
+```bash
+npm run desktop:build   # exporta la web y genera el instalador en src-tauri/target/release/bundle/nsis/
+npm run desktop:dev     # ventana de desarrollo con recarga en caliente
+```
+
+- La carpeta de Drive se lee desde Rust (plugin HTTP de Tauri): la vista pública no admite CORS.
+- Teclas multimedia y el control multimedia de Windows funcionan vía Media Session.
+- Atajos: Espacio (reproducir/pausar), Ctrl+→ / Ctrl+← (siguiente/anterior).
+- Las descargas se guardan en `%APPDATA%\digital.collie.sonaura\sonaura\`.
+
 ## Configuración
 
 Copia `.env.example` a `.env.local` si necesitas cambiar algo:

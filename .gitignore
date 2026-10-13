@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# export web para la app de escritorio
+dist-web/

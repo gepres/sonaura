@@ -1,0 +1,33 @@
+[package]
+name = "sonaura"
+version = "1.0.0"
+description = "Sonaura — tu música, tu energía"
+edition = "2021"
+
+[lib]
+# El nombre lleva `_lib` para no chocar con el binario en Windows (limitación de cargo).
+name = "sonaura_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# protocol-asset: reproducir las canciones descargadas desde la carpeta de datos de la app.
+tauri = { version = "2", features = ["protocol-asset"] }
+# La vista pública de la carpeta de Drive no admite CORS: la petición la hace Rust.
+tauri-plugin-http = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+# Ya viene con tauri: solo se usa su semáforo para acotar transferencias simultáneas.
+tokio = { version = "1", features = ["sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+# Instalador más pequeño: sin símbolos y con optimización de tamaño.
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
