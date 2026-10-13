@@ -46,7 +46,9 @@ export function SeekBar({ position, duration, onSeek }: Props) {
           onLayout={(e: LayoutChangeEvent) => setWidth(Math.max(e.nativeEvent.layout.width, 1))}
           accessibilityRole="adjustable"
           accessibilityLabel="Posición de reproducción"
-          accessibilityValue={{ min: 0, max: Math.round(duration), now: Math.round(shown) }}>
+          aria-valuemin={0}
+          aria-valuemax={Math.round(duration)}
+          aria-valuenow={Math.round(shown)}>
           <View style={styles.track}>
             <View style={[styles.fill, { width: `${ratio * 100}%` }]} />
           </View>

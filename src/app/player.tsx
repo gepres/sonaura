@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/AlbumArt';
@@ -11,6 +11,7 @@ import { FavoriteButton } from '@/components/FavoriteButton';
 import { Icon } from '@/components/Icon';
 import { SeekBar } from '@/components/SeekBar';
 import { EmptyState, SectionTitle } from '@/components/ui';
+import { VolumeControl } from '@/components/VolumeControl';
 import { contentFrame } from '@/lib/layout';
 import { upcomingIds } from '@/player/queue';
 import { useCurrentTrack, usePlayer } from '@/player/store';
@@ -72,7 +73,7 @@ function SleepTimer() {
 
 export default function PlayerScreen() {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const track = useCurrentTrack();
   const playing = usePlayer((s) => s.playing);
   const buffering = usePlayer((s) => s.buffering && s.playing);
@@ -102,8 +103,9 @@ export default function PlayerScreen() {
     );
   }
 
-  // En escritorio la portada crece con la ventana, sin pasarse.
-  const artSize = Math.min(width - space.xl * 2, width > 900 ? 420 : 360);
+  // La portada se ajusta al ancho y también al alto: en una ventana baja de escritorio
+  // deja sitio a título, barra y controles sin obligar a hacer scroll.
+  const artSize = Math.max(140, Math.min(width - space.xl * 2, width > 900 ? 420 : 360, height - 470));
   const upcoming = upcomingIds(queue, 20)
     .map((id) => queueTracks[id])
     .filter(Boolean);
@@ -178,6 +180,12 @@ export default function PlayerScreen() {
             </Text>
           ) : null}
 
+          {Platform.OS === 'web' ? (
+            <View style={styles.volume}>
+              <VolumeControl width={220} />
+            </View>
+          ) : null}
+
           <SleepTimer />
         </View>
 
@@ -224,6 +232,7 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   playBtn: { width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center' },
   notice: { ...typo.caption, color: colors.amber, textAlign: 'center' },
+  volume: { alignItems: 'center' },
   sleepWrap: { alignItems: 'center', gap: space.sm },
   sleepBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.sm },
   chips: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap', justifyContent: 'center' },

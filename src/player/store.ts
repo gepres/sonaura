@@ -48,6 +48,9 @@ type PlayerState = {
   /** Minutos que faltan, recalculado con cada actualización de estado. */
   sleepMinutesLeft: number | null;
   notice: string | null;
+  /** Volumen 0..1 y silencio (en escritorio; en el móvil mandan los botones del teléfono). */
+  volume: number;
+  muted: boolean;
 
   playTracks: (tracks: Track[], startIndex: number, opts?: { shuffle?: boolean }) => void;
   togglePlay: () => void;
@@ -59,6 +62,8 @@ type PlayerState = {
   cycleRepeat: () => void;
   setSleepTimer: (minutes: number | null) => void;
   clearNotice: () => void;
+  setVolume: (volume: number) => void;
+  toggleMute: () => void;
 };
 
 let player: AudioPlayer | null = null;
@@ -69,8 +74,15 @@ function audio(): AudioPlayer {
   if (!player) {
     player = createAudioPlayer(null, { updateInterval: 500 });
     player.addListener('playbackStatusUpdate', onStatus);
+    applyVolume(player);
   }
   return player;
+}
+
+function applyVolume(p: AudioPlayer) {
+  const { volume, muted } = usePlayer.getState();
+  p.volume = volume;
+  p.muted = muted;
 }
 
 /** Configura la sesión de audio: suena en silencio, en segundo plano y toma el foco. */
@@ -150,6 +162,8 @@ export const usePlayer = create<PlayerState>()(
         // replace() conserva el estado de reproducción: si no hay autoplay hay que pausar antes.
         if (!autoplay) p.pause();
         p.replace({ uri: localTrackUri(track.id) ?? streamSource(track), name: track.title });
+        // En web replace() crea un <audio> nuevo con el volumen por defecto.
+        applyVolume(p);
         if (seek > 0) void p.seekTo(seek);
         if (autoplay) {
           p.play();
@@ -184,6 +198,8 @@ export const usePlayer = create<PlayerState>()(
         sleepAt: null,
         sleepMinutesLeft: null,
         notice: null,
+        volume: 1,
+        muted: false,
 
         playTracks: (tracks, startIndex, opts) => {
           if (tracks.length === 0) return;
@@ -259,6 +275,19 @@ export const usePlayer = create<PlayerState>()(
           set({ sleepAt: minutes ? Date.now() + minutes * 60_000 : null, sleepMinutesLeft: minutes }),
 
         clearNotice: () => set({ notice: null }),
+
+        setVolume: (value) => {
+          const volume = Math.min(Math.max(value, 0), 1);
+          // Subir el volumen quita el silencio, como en cualquier reproductor.
+          set({ volume, muted: volume > 0 ? false : get().muted });
+          if (player) applyVolume(player);
+        },
+
+        toggleMute: () => {
+          const { muted, volume } = get();
+          set(muted && volume === 0 ? { muted: false, volume: 0.5 } : { muted: !muted });
+          if (player) applyVolume(player);
+        },
       };
     },
     {
@@ -271,6 +300,8 @@ export const usePlayer = create<PlayerState>()(
         shuffle: s.shuffle,
         repeat: s.repeat,
         resumeAt: s.resumeAt,
+        volume: s.volume,
+        muted: s.muted,
       }),
     },
   ),

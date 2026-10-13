@@ -8,7 +8,8 @@ const isTyping = (target: EventTarget | null) =>
 
 /**
  * Atajos de escritorio. Las teclas multimedia del teclado ya llegan por Media Session.
- * Espacio: reproducir/pausar · Ctrl+→ / Ctrl+←: siguiente/anterior.
+ * Espacio: reproducir/pausar · Ctrl+→ / Ctrl+←: siguiente/anterior ·
+ * Ctrl+↑ / Ctrl+↓: volumen · M: silenciar.
  *
  * Se escucha en fase de captura: tras hacer clic en una canción el foco queda en ese botón y,
  * sin esto, Espacio lo "pulsaría" otra vez (reinicia la canción). Enter sigue activando botones.
@@ -30,6 +31,13 @@ export function useDesktopShortcuts() {
       } else if (e.ctrlKey && e.code === 'ArrowLeft') {
         e.preventDefault();
         player.previous();
+      } else if (e.ctrlKey && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
+        e.preventDefault();
+        const step = e.code === 'ArrowUp' ? 0.1 : -0.1;
+        player.setVolume(Math.round(((player.muted ? 0 : player.volume) + step) * 10) / 10);
+      } else if (e.code === 'KeyM' && !e.ctrlKey) {
+        e.preventDefault();
+        player.toggleMute();
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {

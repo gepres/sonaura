@@ -29,6 +29,9 @@ const ICONS = {
   search: { ios: 'magnifyingglass', android: 'search' },
   queue: { ios: 'list.bullet', android: 'queue_music' },
   cancel: { ios: 'xmark.circle.fill', android: 'cancel' },
+  volumeHigh: { ios: 'speaker.wave.2.fill', android: 'volume_up' },
+  volumeLow: { ios: 'speaker.wave.1.fill', android: 'volume_down' },
+  volumeOff: { ios: 'speaker.slash.fill', android: 'volume_off' },
 } as const satisfies Record<string, { ios: SymbolViewProps['name'] & string; android: string }>;
 
 export type IconName = keyof typeof ICONS;
