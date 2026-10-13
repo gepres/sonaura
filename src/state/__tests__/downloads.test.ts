@@ -1,6 +1,10 @@
 import type { Track } from '@/catalog';
 
+// jest.mock se eleva por encima de los imports: el store ya usa el almacenamiento falso.
+import { useDownloads } from '../downloads';
+
 jest.mock('@react-native-async-storage/async-storage', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- mock oficial de la librería
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
 
@@ -25,7 +29,6 @@ jest.mock('@/state/fileStore', () => ({
   },
 }));
 
-import { useDownloads } from '../downloads';
 
 const track = (n: number): Track => ({
   id: `t${n}`,
@@ -38,7 +41,16 @@ const track = (n: number): Track => ({
   artworkUrl: 'https://example.com/cover',
 });
 
-const settle = () => new Promise((r) => setTimeout(r, 60));
+/** Espera a que se cumpla una condición, sin depender de tiempos fijos. */
+async function waitFor(cond: () => boolean, timeoutMs = 5000) {
+  const start = Date.now();
+  while (!cond()) {
+    if (Date.now() - start > timeoutMs) throw new Error('la condición no se cumplió a tiempo');
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+const idle = () => Object.keys(useDownloads.getState().progress).length === 0;
+const settle = () => new Promise((r) => setTimeout(r, 10)).then(() => waitFor(idle));
 
 beforeEach(() => {
   mockDownload.mockClear();
@@ -48,6 +60,7 @@ beforeEach(() => {
 it('descarga un álbum completo y guarda la portada una sola vez', async () => {
   useDownloads.getState().enqueue([track(1), track(2), track(3), track(4)]);
   await settle();
+  await waitFor(() => Boolean(useDownloads.getState().covers['album-1']));
 
   const { items, covers, progress } = useDownloads.getState();
   expect(Object.keys(items).sort()).toEqual(['t1', 't2', 't3', 't4']);
