@@ -21,19 +21,26 @@ export function SeekBar({ position, duration, onSeek }: Props) {
     if (duration > 0) onSeek(toSeconds(x));
   };
 
+  // Arrastre horizontal para buscar (el vertical se deja al scroll) y toque para saltar.
   const pan = Gesture.Pan()
     .runOnJS(true)
-    .minDistance(0)
-    .onBegin((e) => update(e.x))
+    .activeOffsetX([-4, 4])
+    .failOffsetY([-12, 12])
+    .onStart((e) => update(e.x))
     .onUpdate((e) => update(e.x))
     .onEnd((e) => commit(e.x))
     .onFinalize((_, success) => {
       if (!success) setScrub(null);
     });
+  const tap = Gesture.Tap()
+    .runOnJS(true)
+    .onEnd((e, success) => {
+      if (success) commit(e.x);
+    });
 
   return (
     <View>
-      <GestureDetector gesture={pan}>
+      <GestureDetector gesture={Gesture.Race(pan, tap)}>
         <View
           style={styles.hit}
           onLayout={(e: LayoutChangeEvent) => setWidth(Math.max(e.nativeEvent.layout.width, 1))}

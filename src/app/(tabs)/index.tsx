@@ -23,7 +23,9 @@ import { EmptyState, PillButton, SectionTitle, StatusBanner } from '@/components
 import { APP_NAME } from '@/config';
 import { pluralize } from '@/lib/format';
 import { playAll, playFrom } from '@/player/actions';
+import { useDownloads } from '@/state/downloads';
 import { useLibrary } from '@/state/library';
+import { useNetwork } from '@/state/network';
 import { colors, radius, space, typo } from '@/theme';
 
 const normalize = (s: string) =>
@@ -62,7 +64,11 @@ export default function HomeScreen() {
   const library = useLibrary((s) => s.library);
   const loading = useLibrary((s) => s.loading);
   const error = useLibrary((s) => s.error);
+  const online = useNetwork((s) => s.online);
+  const downloadedCount = useDownloads((s) => Object.keys(s.items).length);
   const [query, setQuery] = useState('');
+  // Solo el gesto de tirar muestra el indicador nativo; el refresco automático usa el de la cabecera.
+  const [pulling, setPulling] = useState(false);
 
   const allTracks = useMemo(() => library?.albums.flatMap((a) => a.tracks) ?? [], [library]);
   const results = useMemo(() => {
@@ -73,6 +79,11 @@ export default function HomeScreen() {
 
   const cardSize = (Math.min(width, 700) - space.lg * 2 - space.md) / 2;
   const refresh = () => void useLibrary.getState().refresh();
+  const onPull = async () => {
+    setPulling(true);
+    await useLibrary.getState().refresh();
+    setPulling(false);
+  };
 
   const shuffleAll = () => playAll(allTracks, true);
 
@@ -81,7 +92,15 @@ export default function HomeScreen() {
       style={styles.screen}
       contentContainerStyle={{ paddingTop: insets.top + space.md, paddingBottom: space.xxl }}
       keyboardShouldPersistTaps="handled"
-      refreshControl={<RefreshControl refreshing={loading && !!library} onRefresh={refresh} tintColor={colors.magenta} />}>
+      refreshControl={
+        <RefreshControl
+          refreshing={pulling}
+          onRefresh={onPull}
+          tintColor={colors.magenta}
+          colors={[colors.magenta]}
+          progressBackgroundColor={colors.surface}
+        />
+      }>
       <View style={styles.header}>
         <BrandMark size={40} />
         <View style={{ flex: 1 }}>
@@ -143,7 +162,11 @@ export default function HomeScreen() {
                   <View style={{ flex: 1, gap: 4 }}>
                     <Text style={styles.heroOver}>MEZCLA PARA TI</Text>
                     <Text style={styles.heroTitle}>Déjate llevar</Text>
-                    <Text style={styles.heroSub}>{pluralize(allTracks.length, 'canción', 'canciones')} en aleatorio</Text>
+                    <Text style={styles.heroSub}>
+                      {online
+                        ? `${pluralize(allTracks.length, 'canción', 'canciones')} en aleatorio`
+                        : `${pluralize(downloadedCount, 'canción descargada', 'canciones descargadas')}`}
+                    </Text>
                   </View>
                   <View style={styles.heroPlay}>
                     <Icon name="shuffle" size={26} color="#1A0B2E" />
