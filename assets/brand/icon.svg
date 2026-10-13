@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="75%">
+      <stop offset="0" stop-color="#34206E"/>
+      <stop offset="0.55" stop-color="#170F36"/>
+      <stop offset="1" stop-color="#0A0717"/>
+    </radialGradient>
+    <linearGradient id="aura" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFB547"/>
+      <stop offset="0.5" stop-color="#FF4F9A"/>
+      <stop offset="1" stop-color="#7C5CFF"/>
+    </linearGradient>
+    <linearGradient id="bars" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#FFC66B"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="28"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <g id="mark">
+    <circle cx="512" cy="512" r="318" fill="none" stroke="url(#aura)" stroke-width="70" opacity="0.75" filter="url(#glow)"/>
+    <circle cx="512" cy="512" r="318" fill="none" stroke="url(#aura)" stroke-width="34"/>
+    <g fill="url(#bars)">
+      <rect x="336" y="452" width="48" height="120" rx="24"/>
+      <rect x="412" y="392" width="48" height="240" rx="24"/>
+      <rect x="488" y="322" width="48" height="380" rx="24"/>
+      <rect x="564" y="392" width="48" height="240" rx="24"/>
+      <rect x="640" y="452" width="48" height="120" rx="24"/>
+    </g>
+  </g>
+</svg>
