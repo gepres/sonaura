@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 
-import { coverUrl, extractFolderId, streamUrl } from '../driveUrls';
+import { apiMediaUrl, coverUrl, extractFolderId, streamUrl } from '../driveUrls';
 
 const id = '1Bj2CW9jD-rbQwdVeB7ZEOkkI9obYZBMw';
 
@@ -17,6 +17,11 @@ describe('Drive URLs', () => {
   test('encodes IDs as single query parameter values', () => {
     expect(streamUrl('a&b c')).toContain('id=a%26b%20c&export=download');
     expect(coverUrl('a&b c')).toContain('id=a%26b%20c&sz=w600');
+  });
+
+  test('builds the Drive API media URL used by the browser', () => {
+    expect(apiMediaUrl(id, 'KEY')).toBe(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&key=KEY`);
+    expect(apiMediaUrl('a/b?c', 'k&y')).toBe('https://www.googleapis.com/drive/v3/files/a%2Fb%3Fc?alt=media&key=k%26y');
   });
 
   test.each([

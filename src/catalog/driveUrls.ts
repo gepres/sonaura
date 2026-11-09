@@ -2,6 +2,14 @@ export function streamUrl(fileId: string): string {
   return `https://drive.usercontent.google.com/download?id=${encodeURIComponent(fileId)}&export=download`;
 }
 
+/**
+ * Audio servido por la API v3 de Drive. A diferencia de `streamUrl`, Google lo entrega a un
+ * `<audio>` de otro sitio (con CORS y Range): es el que usa la web en el navegador.
+ */
+export function apiMediaUrl(fileId: string, apiKey: string): string {
+  return `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&key=${encodeURIComponent(apiKey)}`;
+}
+
 export function coverUrl(fileId: string, size = 600): string {
   return `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w${size}`;
 }

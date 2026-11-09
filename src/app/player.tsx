@@ -1,4 +1,3 @@
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -6,6 +5,7 @@ import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, u
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/AlbumArt';
+import { CoverImage } from '@/components/CoverImage';
 import { DownloadButton } from '@/components/DownloadButton';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { Icon } from '@/components/Icon';
@@ -113,7 +113,7 @@ export default function PlayerScreen() {
 
   return (
     <View style={styles.screen}>
-      {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} blurRadius={60} contentFit="cover" /> : null}
+      {cover ? <CoverImage uri={cover} style={StyleSheet.absoluteFill} blurRadius={60} /> : null}
       <LinearGradient colors={['rgba(10,7,23,0.55)', 'rgba(10,7,23,0.92)', colors.bg]} style={StyleSheet.absoluteFill} />
 
       <ScrollView

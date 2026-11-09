@@ -201,7 +201,7 @@ describe('createDefaultSource', () => {
 
 test('the public index exports the complete runtime contract', () => {
   expect(Object.keys(catalog).sort()).toEqual([
-    'CatalogError', 'buildLibrary', 'cleanTrackTitle', 'coverUrl', 'createApiSource',
+    'CatalogError', 'apiMediaUrl', 'buildLibrary', 'cleanTrackTitle', 'coverUrl', 'createApiSource',
     'createDefaultSource', 'createEmbeddedSource', 'extractFolderId', 'parseEmbeddedFolderView', 'streamUrl',
   ]);
   const error = new catalog.CatalogError('http', 'Failed', 500);

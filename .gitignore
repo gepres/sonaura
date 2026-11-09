@@ -44,3 +44,6 @@ example
 
 # export web para la app de escritorio
 dist-web/
+
+# Netlify CLI (estado del enlace con el proyecto)
+.netlify

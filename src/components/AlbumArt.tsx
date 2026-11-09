@@ -1,7 +1,7 @@
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text } from 'react-native';
 
+import { CoverImage } from '@/components/CoverImage';
 import { useCoverUri } from '@/state/downloads';
 import { colors, radius } from '@/theme';
 
@@ -32,16 +32,7 @@ export function AlbumArt({ albumId, coverUrl, title, size, rounded = radius.md }
   const box = { width: size, height: size, borderRadius: rounded };
 
   if (source) {
-    return (
-      <Image
-        source={{ uri: source }}
-        style={[box, styles.base]}
-        contentFit="cover"
-        transition={200}
-        cachePolicy="disk"
-        recyclingKey={albumId}
-      />
-    );
+    return <CoverImage uri={source} style={[box, styles.base]} recyclingKey={albumId} />;
   }
 
   return (

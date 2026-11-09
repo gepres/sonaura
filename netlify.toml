@@ -1,0 +1,6 @@
+# Web de Sonaura: el export web de Expo (SPA) como sitio estático, sin funciones.
+# La clave EXPO_PUBLIC_DRIVE_WEB_API_KEY no va aquí: en .env.local (despliegue desde la CLI)
+# o en las variables de entorno del proyecto en Netlify (si se conecta el repositorio).
+[build]
+  command = "npm run web:export"
+  publish = "dist-web"
