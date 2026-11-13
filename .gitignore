@@ -47,3 +47,7 @@ dist-web/
 
 # Netlify CLI (estado del enlace con el proyecto)
 .netlify
+
+# letras sincronizadas generadas por scripts/letras (contenido, se sube a Drive)
+/letras/
+__pycache__/

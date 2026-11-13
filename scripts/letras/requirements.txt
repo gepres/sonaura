@@ -1,0 +1,6 @@
+# Antes, PyTorch con CUDA (o sin él, para CPU); ver README.md:
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126
+# Versiones con las que se probó (torch 2.14.1+cu126, Python 3.12, RTX 3050 Ti 4 GB).
+stable-ts==2.19.1
+openai-whisper==20250625
+mutagen==1.48.1
