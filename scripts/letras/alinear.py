@@ -590,6 +590,7 @@ def verificar(modelo, audio, lineas: list[Linea], idioma: str, n: int) -> list[d
 MODELO_TRANSCRIPCION = "large-v3-turbo"  # medido: mismo WER que large-v3, más completo en salsa, 3× más rápido
 MODELO_CONTRASTE = "large-v3"
 AUTOR_TRANSCRIPCION = "Transcripción automática (Whisper), revisar"
+AUTOR_REVISADA = "Letra revisada a mano; tiempos alineados con Whisper"
 SR = 16000
 MAX_VERSO = 60        # caracteres por línea transcrita
 PAUSA_VERSO = 0.6     # segundos de silencio que cortan un verso
@@ -909,6 +910,34 @@ def marca(segundos: float) -> str:
     return f"{cs // 6000:02d}:{(cs % 6000) // 100:02d}.{cs % 100:02d}"
 
 
+def tiempos_de_lrc(ruta: Path) -> list[tuple[float, str]]:
+    """Las líneas con tiempo de un .lrc: (segundos, texto)."""
+    filas = []
+    for fila in ruta.read_text(encoding="utf-8").splitlines():
+        m = re.match(r"^\[(\d+):(\d+(?:\.\d+)?)\](.*)$", fila.strip())
+        if m:
+            filas.append((int(m[1]) * 60 + float(m[2]), m[3].strip()))
+    return filas
+
+
+def conservar_tiempos(lineas: list[Linea], anterior: list[tuple[float, str]]) -> int:
+    """Al realinear una letra revisada: las líneas que no cambiaron, o que cambiaron de palabras pero
+    siguen en su sitio (sustitución una a una), conservan el tiempo del .lrc anterior. En una
+    transcripción ese tiempo sale de los tiempos por palabra y es más fiable que realinear, que a
+    veces junta dos versos. Las líneas nuevas se quedan con el de la alineación. Devuelve cuántas conservó."""
+    viejas = [_normal(t) for _, t in anterior]
+    nuevas = [_normal(ln.texto) for ln in lineas]
+    conservadas = 0
+    for op, a0, a1, b0, b1 in difflib.SequenceMatcher(a=viejas, b=nuevas, autojunk=False).get_opcodes():
+        if op == "equal" or (op == "replace" and a1 - a0 == b1 - b0):
+            for k in range(b1 - b0):
+                lineas[b0 + k].inicio = anterior[a0 + k][0]
+                conservadas += 1
+    for i in range(1, len(lineas)):  # el orden manda: nada antes que la línea anterior
+        lineas[i].inicio = max(lineas[i].inicio, lineas[i - 1].inicio)
+    return conservadas
+
+
 def escribir_lrc(destino: Path, lineas: list[Linea], titulo: str | None, album: str | None,
                  duracion: float, autor: str | None = None) -> None:
     filas = []
@@ -1001,6 +1030,9 @@ def main(argv: list[str] | None = None) -> int:
                     help=f"segundo modelo para medir la confianza (por defecto {MODELO_CONTRASTE}; «ninguno» lo omite)")
     ap.add_argument("--sin-separar", action="store_true",
                     help="transcribe la mezcla tal cual, sin aislar la voz con Demucs")
+    ap.add_argument("--desde-txt", action="store_true",
+                    help="usa la letra corregida del .txt junto al .lrc y la alinea con el audio "
+                         "(con --forzar y --solo, tras revisar una transcripción)")
     args = ap.parse_args(argv)
 
     if args.carpeta:
@@ -1028,7 +1060,15 @@ def main(argv: list[str] | None = None) -> int:
         try:
             fuente = cancion.ruta if cancion.ruta else etiqueta_remota(cancion, args.cache)
             etiquetas = leer_etiquetas(fuente)
-            if not etiquetas.letra:
+            revisada = destino.with_suffix(".txt")
+            autor = None
+            if args.desde_txt and revisada.exists():
+                # La letra corregida a mano en el .txt de una transcripción: se alinea con el audio
+                # como la del ID3, respetando sus líneas tal cual.
+                lineas = preparar(revisada.read_text(encoding="utf-8").replace("[?]", ""), partir=False)
+                autor = AUTOR_REVISADA
+                print(f"  letra revisada: {revisada.name}")
+            elif not etiquetas.letra:
                 if args.transcribir:
                     res.estado = "pendiente de transcribir"
                     pendientes.append((cancion, etiquetas, res))
@@ -1037,7 +1077,8 @@ def main(argv: list[str] | None = None) -> int:
                     res.estado = "sin letra (saltada)"
                     print("  sin letra en la etiqueta ID3: se salta (usa --transcribir)")
                 continue
-            lineas = preparar(etiquetas.letra, partir=not args.sin_partir)
+            else:
+                lineas = preparar(etiquetas.letra, partir=not args.sin_partir)
             versos = [ln.texto for ln in lineas if not ln.encabezado]
             if not versos:
                 res.estado = "sin versos (saltada)"
@@ -1063,10 +1104,20 @@ def main(argv: list[str] | None = None) -> int:
             res.idioma = f"{idioma} ({metodo})"
             print(f"  idioma {res.idioma}; {len(versos)} versos; alineando…")
 
+            if autor == AUTOR_REVISADA and not args.sin_separar:
+                # Las transcritas suelen ser salsa con mucha percusión: se alinea sobre la voz aislada
+                # (la de la caché, si ya se separó al transcribir).
+                import numpy as np
+
+                npy, _ = separar_voces([ruta], args.cache, {ruta: cancion.etiqueta})[ruta]
+                audio = np.load(npy)
             stats = alinear(modelo, audio, lineas, idioma)
             ajustar_tiempos(lineas, duracion)
+            if autor == AUTOR_REVISADA and destino.exists():
+                conservadas = conservar_tiempos(lineas, tiempos_de_lrc(destino))
+                print(f"  {conservadas} de {len(lineas)} líneas conservan el tiempo del .lrc anterior")
             album = etiquetas.album or (Path(cancion.carpeta).name if cancion.carpeta else None)
-            escribir_lrc(destino, lineas, etiquetas.titulo or cancion.base, album, duracion)
+            escribir_lrc(destino, lineas, etiquetas.titulo or cancion.base, album, duracion, autor=autor)
             res.versos = len(versos)
             res.secciones = sum(1 for ln in lineas if ln.encabezado)
             res.avisos = avisos_de_calidad(lineas, duracion, stats)

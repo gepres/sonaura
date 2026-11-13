@@ -43,6 +43,7 @@ $py = "$env:LOCALAPPDATA\sonaura-letras\venv\Scripts\python.exe"
 | `--modelo-transcripcion` | Modelo para transcribir (por defecto `large-v3-turbo`). |
 | `--contraste NOMBRE` | Segundo modelo para medir la confianza (por defecto `large-v3`; `ninguno` lo omite y va el doble de rápido). |
 | `--sin-separar` | Transcribe la mezcla tal cual, sin aislar la voz (peor: ver abajo). |
+| `--desde-txt` | Tras revisar una transcripción: usa la letra corregida del `.txt` y regenera el `.lrc` (ver «Después de revisar»). |
 
 La salida replica las carpetas de Drive: `letras/<álbum>/<nombre del MP3>.lrc`. Cada `.lrc` se
 sube junto a su MP3, en la misma carpeta de Drive. Los MP3 bajados se guardan en
@@ -125,6 +126,25 @@ En una salsa (`track-1-salsa`) sin separar la voz solo salen 125 palabras; con l
 337 (turbo) y 305 (large-v3, que además se saltó 0:11–0:33 y escribió «Gracias.» en su lugar).
 Por eso: voz aislada siempre, turbo como modelo principal (igual de preciso, más completo y
 3 veces más rápido) y large-v3 como contraste.
+
+**Ojo: a veces turbo se salta un tramo entero.** En `track-4` dejó fuera la intro hablada
+(0:00–0:30, ocho frases que large-v3 oyó con probabilidad 0,96–1,00). Si la letra empieza tarde o
+hay un hueco largo con voz, compara con large-v3 en ese tramo.
+
+### Después de revisar: `--desde-txt`
+
+La app lee el `.lrc`, no el `.txt`. Cuando se corrige el `.txt` (palabras, versos que faltaban,
+estribillos que el filtro quitó), se regenera el `.lrc` de esa canción:
+
+```powershell
+& $py scripts\letras\alinear.py --desde-txt --forzar --solo "track-2"
+```
+
+Usa las líneas del `.txt` tal cual (sin los `[?]`) y las alinea con la voz aislada. Las líneas que
+no cambiaron (o que cambiaron de palabras pero siguen en su sitio) **conservan el tiempo del `.lrc`
+anterior**, que viene de los tiempos por palabra y es más fiable: realinear a veces junta dos
+versos. Las líneas nuevas toman el tiempo de la alineación. El `.lrc` queda con la cabecera
+`[by:Letra revisada a mano; tiempos alineados con Whisper]`.
 
 ## Avisos del resumen
 
