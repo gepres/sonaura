@@ -9,6 +9,7 @@ import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { listens } from '@/analytics';
 import type { Track } from '@/catalog';
 import { streamSource } from '@/lib/streamSource';
 import { localCoverUri, localTrackUri } from '@/state/downloads';
@@ -159,9 +160,11 @@ export const usePlayer = create<PlayerState>()(
           return;
         }
         const p = audio();
+        const localUri = localTrackUri(track.id);
         // replace() conserva el estado de reproducción: si no hay autoplay hay que pausar antes.
         if (!autoplay) p.pause();
-        p.replace({ uri: localTrackUri(track.id) ?? streamSource(track), name: track.title });
+        p.replace({ uri: localUri ?? streamSource(track), name: track.title });
+        listens.start(track, localUri !== null);
         // En web replace() crea un <audio> nuevo con el volumen por defecto.
         applyVolume(p);
         if (seek > 0) void p.seekTo(seek);
@@ -340,6 +343,7 @@ function onStatus(status: StatusEvent) {
   }
 
   if (status.didJustFinish) {
+    listens.finish();
     const { queue, repeat } = state;
     if (!queue) return;
     const pos = nextPosition(queue, repeat, true);
@@ -348,6 +352,9 @@ function onStatus(status: StatusEvent) {
       void audio().seekTo(0);
       audio().pause();
     } else if (pos === queue.position) {
+      // Repetir una: cada vuelta es una escucha nueva.
+      const again = trackAt(state, queue);
+      if (again) listens.start(again, localTrackUri(again.id) !== null);
       void audio().seekTo(0);
       audio().play();
     } else {
@@ -372,6 +379,7 @@ function onStatus(status: StatusEvent) {
   // Se guarda la posición cada ~5 s para reanudar donde se quedó.
   if (Math.abs(position - state.resumeAt) >= 5) patch.resumeAt = position;
   usePlayer.setState(patch);
+  listens.progress(position, patch.duration ?? 0, nativePlaying);
 }
 
 export function useCurrentTrack(): Track | null {

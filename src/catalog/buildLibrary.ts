@@ -4,6 +4,10 @@ import type { Album, FolderListing, FolderSource, Library, Track } from './types
 const audioExtension = /\.(mp3|m4a|aac|wav|flac)$/i;
 const imageExtension = /\.(jpg|jpeg|png|webp)$/i;
 const preferredCover = /^(cover|folder|front|portada|artwork)\.(jpg|jpeg|png|webp)$/i;
+const lyricsExtension = /\.lrc$/i;
+
+/** Nombre sin extensión, para emparejar «01 - Canción.mp3» con «01 - Canción.lrc». */
+const baseName = (fileName: string) => fileName.trim().replace(/\.[^.]+$/, '').normalize('NFC').toLowerCase();
 
 export function cleanTrackTitle(fileName: string): { title: string; trackNumber: number | null } {
   let title = fileName.trim().replace(/\.[^.]+$/, '');
@@ -47,6 +51,11 @@ export async function buildLibrary(
     const images = listing.entries.filter((entry) => entry.kind === 'file' && imageExtension.test(entry.name));
     const image = images.find((entry) => preferredCover.test(entry.name)) ?? images[0];
     const artworkUrl = image ? coverUrl(image.id) : null;
+    const lyricsByName = new Map(
+      listing.entries
+        .filter((entry) => entry.kind === 'file' && lyricsExtension.test(entry.name))
+        .map((entry) => [baseName(entry.name), entry.id]),
+    );
     const tracks: Track[] = listing.entries
       .filter((entry) => entry.kind === 'file' && audioExtension.test(entry.name))
       .map((entry) => ({
@@ -57,6 +66,7 @@ export async function buildLibrary(
         albumTitle: title,
         streamUrl: streamUrl(entry.id),
         artworkUrl,
+        lyricsFileId: lyricsByName.get(baseName(entry.name)) ?? null,
       }))
       .sort(compareTracks);
     if (tracks.length > 0) albums.push({ id: task.id, title, coverUrl: artworkUrl, tracks, isRoot });

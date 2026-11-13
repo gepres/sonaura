@@ -15,6 +15,11 @@ export type Track = {
   albumTitle: string;
   streamUrl: string;
   artworkUrl: string | null;
+  /**
+   * `.lrc` con la letra sincronizada, junto al audio en Drive y con el mismo nombre.
+   * Opcional: las pistas guardadas antes (favoritos, descargas) no lo traen.
+   */
+  lyricsFileId?: string | null;
 };
 
 export type Album = {

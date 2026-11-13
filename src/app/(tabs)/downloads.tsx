@@ -10,7 +10,7 @@ import { confirmAction } from '@/lib/confirm';
 import { formatBytes, pluralize } from '@/lib/format';
 import { contentFrame } from '@/lib/layout';
 import { playAll, playFrom } from '@/player/actions';
-import { totalDownloadedBytes, useDownloads } from '@/state/downloads';
+import { downloadsSupported, totalDownloadedBytes, useDownloads } from '@/state/downloads';
 import { useLibrary } from '@/state/library';
 import { colors, space, typo } from '@/theme';
 
@@ -75,13 +75,20 @@ export default function DownloadsScreen() {
         </View>
       }
       ListEmptyComponent={
-        inFlight.length === 0 ? (
+        inFlight.length > 0 ? null : downloadsSupported ? (
           <EmptyState
             title="Escucha sin conexión"
             message="Toca ⬇ en una canción o descarga un álbum completo. Sonará aunque estés en modo avión."
             action={<PillButton label="Ver álbumes" variant="ghost" onPress={() => router.navigate('/')} />}
           />
-        ) : null
+        ) : (
+          // En el navegador no hay dónde guardar canciones: para eso está la app.
+          <EmptyState
+            title="Escucha sin conexión con la app"
+            message="En el navegador la música suena por internet. Con la app de Android o Windows puedes guardar canciones y álbumes y escucharlos en modo avión."
+            action={<PillButton label="Descargar la app" icon="install" onPress={() => router.push('/descargar')} />}
+          />
+        )
       }
       renderItem={({ item }) => <TrackRow track={item} onPress={() => playFrom(tracks, item)} />}
     />

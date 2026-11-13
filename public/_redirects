@@ -1,1 +1,6 @@
+# Estadísticas: los eventos entran por el propio dominio y Netlify los pasa a PostHog (región US).
+# Un nombre propio de la app: los bloqueadores de anuncios cortan us.i.posthog.com, /ingest o /analytics.
+# Va antes de la regla de la SPA, que si no se quedaría con /pulso.
+/pulso/*  https://us.i.posthog.com/:splat  200
+
 /*    /index.html   200

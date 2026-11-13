@@ -17,6 +17,7 @@ import type { Album } from '@/catalog';
 import { AlbumArt } from '@/components/AlbumArt';
 import { BrandMark } from '@/components/BrandMark';
 import { Icon } from '@/components/Icon';
+import { InstallBanner } from '@/components/InstallBanner';
 import { TrackRow } from '@/components/TrackRow';
 import { EmptyState, PillButton, SectionTitle, StatusBanner } from '@/components/ui';
 import { APP_NAME } from '@/config';
@@ -173,6 +174,8 @@ export default function HomeScreen() {
                   </View>
                 </LinearGradient>
               </Pressable>
+
+              <InstallBanner />
 
               <SectionTitle>Álbumes</SectionTitle>
               <View style={[styles.grid, { gap }]}>

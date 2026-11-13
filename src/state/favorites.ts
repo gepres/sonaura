@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { trackSong } from '@/analytics';
 import type { Track } from '@/catalog';
 import { safeStorage } from '@/state/storage';
 
@@ -14,15 +15,18 @@ type FavoritesState = {
 
 export const useFavorites = create<FavoritesState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       items: {},
-      toggle: (track) =>
+      toggle: (track) => {
+        const added = !get().items[track.id];
         set((s) => {
           const items = { ...s.items };
-          if (items[track.id]) delete items[track.id];
-          else items[track.id] = { track, addedAt: Date.now() };
+          if (added) items[track.id] = { track, addedAt: Date.now() };
+          else delete items[track.id];
           return { items };
-        }),
+        });
+        trackSong(added ? 'favorito_agregado' : 'favorito_quitado', track);
+      },
     }),
     { name: 'sonaura.favorites.v1', storage: safeStorage() },
   ),

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { trackSong } from '@/analytics';
 import type { Track } from '@/catalog';
 import { assertIsAudioHead } from '@/state/audioHead';
 import { fileStore } from '@/state/fileStore';
@@ -97,6 +98,7 @@ export const useDownloads = create<DownloadsState>()(
           const failed = { ...get().failed };
           delete failed[track.id];
           finish(track.id, { items: { ...get().items, [track.id]: record }, failed });
+          trackSong('cancion_guardada', track);
           void saveCover(track);
         } catch (err) {
           await fileStore.remove('tracks', fileName).catch(() => {});

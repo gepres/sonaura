@@ -9,10 +9,12 @@ import { CoverImage } from '@/components/CoverImage';
 import { DownloadButton } from '@/components/DownloadButton';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { Icon } from '@/components/Icon';
+import { LyricsPanel } from '@/components/LyricsPanel';
 import { SeekBar } from '@/components/SeekBar';
 import { EmptyState, SectionTitle } from '@/components/ui';
 import { VolumeControl } from '@/components/VolumeControl';
 import { contentFrame } from '@/lib/layout';
+import { useLyrics, useLyricsView } from '@/lyrics/store';
 import { playbackModeHint, repeatLabel } from '@/player/modes';
 import { upcomingIds } from '@/player/queue';
 import { useCurrentTrack, usePlayer } from '@/player/store';
@@ -95,6 +97,10 @@ export default function PlayerScreen() {
   const cycleRepeat = usePlayer((s) => s.cycleRepeat);
   const clearNotice = usePlayer((s) => s.clearNotice);
   const cover = useCoverUri(track?.albumId ?? '', track?.artworkUrl ?? null);
+  const showLyrics = useLyricsView((s) => s.visible);
+  const toggleLyrics = useLyricsView((s) => s.toggle);
+  // Se busca la letra al abrir el reproductor: al tocar «Letra» ya está.
+  useLyrics(track);
 
   if (!track || !queue) {
     return (
@@ -128,12 +134,29 @@ export default function PlayerScreen() {
               {track.albumTitle}
             </Text>
           </View>
-          <View style={{ width: 28 }} />
+          <Pressable
+            onPress={toggleLyrics}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={showLyrics ? 'Ver portada' : 'Ver letra'}
+            accessibilityState={{ selected: showLyrics }}>
+            <Icon name="lyrics" size={26} color={showLyrics ? colors.magenta : colors.text} />
+          </Pressable>
         </View>
 
-        <View style={[styles.artWrap, { width: artSize, height: artSize }]}>
-          <AlbumArt albumId={track.albumId} coverUrl={track.artworkUrl} title={track.albumTitle} size={artSize} rounded={radius.lg} />
-        </View>
+        {showLyrics ? (
+          <LyricsPanel
+            track={track}
+            width={Math.min(width - space.lg * 2, 560)}
+            height={Math.max(artSize, 280)}
+            position={position}
+            onSeek={seekTo}
+          />
+        ) : (
+          <View style={[styles.artWrap, { width: artSize, height: artSize }]}>
+            <AlbumArt albumId={track.albumId} coverUrl={track.artworkUrl} title={track.albumTitle} size={artSize} rounded={radius.lg} />
+          </View>
+        )}
 
         <View style={styles.body}>
           <View style={styles.titleRow}>

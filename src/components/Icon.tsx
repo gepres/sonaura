@@ -23,6 +23,7 @@ const ICONS = {
   trash: { ios: 'trash', android: 'delete' },
   chevronDown: { ios: 'chevron.down', android: 'keyboard_arrow_down' },
   back: { ios: 'chevron.left', android: 'arrow_back' },
+  chevronRight: { ios: 'chevron.right', android: 'chevron_right' },
   sleep: { ios: 'moon.zzz', android: 'bedtime' },
   refresh: { ios: 'arrow.clockwise', android: 'refresh' },
   close: { ios: 'xmark', android: 'close' },
@@ -32,6 +33,10 @@ const ICONS = {
   volumeHigh: { ios: 'speaker.wave.2.fill', android: 'volume_up' },
   volumeLow: { ios: 'speaker.wave.1.fill', android: 'volume_down' },
   volumeOff: { ios: 'speaker.slash.fill', android: 'volume_off' },
+  lyrics: { ios: 'quote.bubble', android: 'lyrics' },
+  install: { ios: 'arrow.down.app', android: 'install_mobile' },
+  desktop: { ios: 'desktopcomputer', android: 'desktop_windows' },
+  phone: { ios: 'iphone', android: 'phone_android' },
 } as const satisfies Record<string, { ios: SymbolViewProps['name'] & string; android: string }>;
 
 export type IconName = keyof typeof ICONS;

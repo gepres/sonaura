@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { initAnalytics } from '@/analytics';
 import { installDesktopChrome } from '@/lib/desktopChrome';
 import { useDesktopShortcuts } from '@/lib/useDesktopShortcuts';
 import { initPlayer } from '@/player/store';
@@ -46,6 +47,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     startNetworkWatcher();
+    initAnalytics();
     void initPlayer();
     // Se muestra lo guardado en cuanto está en memoria y se refresca desde Drive en segundo plano.
     // En escritorio, además, las rutas de las descargas se resuelven antes de pintar.
@@ -70,6 +72,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="player" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="descargar" options={{ title: 'Descargar la app' }} />
         </Stack>
       </ThemeProvider>
     </GestureHandlerRootView>

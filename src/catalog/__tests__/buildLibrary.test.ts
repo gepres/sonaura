@@ -79,6 +79,7 @@ describe('buildLibrary', () => {
       title: 'Caminar descalzo', fileName: '01 - Caminar descalzo.mp3', trackNumber: 1,
       albumId: esistenzaId, albumTitle: 'Esistenza', artworkUrl: artwork,
       streamUrl: 'https://drive.usercontent.google.com/download?id=1ClGiQrrhzPN2-usxTK1VDDm4ZwOhoZPu&export=download',
+      lyricsFileId: null,
     });
     expect(esistenza.tracks.map((track) => track.trackNumber)).toEqual([1, 2, 3, 4]);
     for (const album of library.albums) {
@@ -202,6 +203,17 @@ describe('buildLibrary', () => {
     } });
     const library = await buildLibrary('root', source, { maxDepth: 0 });
     expect(library.albums[0].tracks.map((track) => track.id)).toEqual(['0', '1', '2', '3', '4']);
+  });
+
+  test('pairs each track with the .lrc of the same name (synced lyrics), and the .lrc is not a track', async () => {
+    const source = fakeSource({ root: {
+      title: 'Root', entries: [
+        file('song', '01 - Präsenz eins.mp3'), file('lrc', '01 - PRÄSENZ EINS.lrc'),
+        file('other', '02 - Die Maske.mp3'), file('stray', '03 - Otra.lrc'),
+      ],
+    } });
+    const tracks = (await buildLibrary('root', source)).albums[0].tracks;
+    expect(tracks.map((track) => [track.id, track.lyricsFileId])).toEqual([['song', 'lrc'], ['other', null]]);
   });
 
   test.each(['CoVeR.JPG', 'folder.JPEG', 'FRONT.PNG', 'Portada.webp', 'artwork.jpg'])('prefers a named cover: %s', async (name) => {
