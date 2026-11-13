@@ -6,8 +6,10 @@ ID3 del MP3 (`TXXX` «lyrics-…» o `USLT`), alineándola con el audio mediante
 
 ## Instalación (una vez)
 
-Necesita Python 3.12 y `ffmpeg` en el PATH. El entorno va en C: (pesa unos 5 GB con PyTorch) y el
-modelo (~1,6 GB) se descarga solo la primera vez en `%USERPROFILE%\.cache\whisper`.
+Necesita Python 3.12 y `ffmpeg` en el PATH. El entorno va en C: (pesa unos 5 GB con PyTorch) y los
+modelos se descargan solos la primera vez: Whisper `large-v3-turbo` (~1,6 GB) en
+`%USERPROFILE%\.cache\whisper`; con `--transcribir`, además `large-v3` (~3 GB, mismo sitio) y
+Demucs (~80 MB, caché de Hugging Face).
 
 ```powershell
 python -m venv $env:LOCALAPPDATA\sonaura-letras\venv
@@ -37,6 +39,10 @@ $py = "$env:LOCALAPPDATA\sonaura-letras\venv\Scripts\python.exe"
 | `--idioma es` | Fuerza el idioma en vez de detectarlo. |
 | `--verificar N` | Control de calidad: transcribe N versos por canción alrededor de su tiempo y los compara con la letra. |
 | `--sin-partir` | No parte los versos largos (ver abajo). |
+| `--transcribir` | Transcribe con IA las canciones **sin** letra (ver «Canciones sin letra»); sin esta opción se saltan. |
+| `--modelo-transcripcion` | Modelo para transcribir (por defecto `large-v3-turbo`). |
+| `--contraste NOMBRE` | Segundo modelo para medir la confianza (por defecto `large-v3`; `ninguno` lo omite y va el doble de rápido). |
+| `--sin-separar` | Transcribe la mezcla tal cual, sin aislar la voz (peor: ver abajo). |
 
 La salida replica las carpetas de Drive: `letras/<álbum>/<nombre del MP3>.lrc`. Cada `.lrc` se
 sube junto a su MP3, en la misma carpeta de Drive. Los MP3 bajados se guardan en
@@ -73,6 +79,53 @@ petición parcial; las canciones sin letra no se descargan enteras).
   que se detecta por las palabras frecuentes del texto (es, it, de, en, fr, pt); si el resultado
   es dudoso, Whisper lo detecta en el audio.
 
+## Canciones sin letra: `--transcribir`
+
+```powershell
+& $py scripts\letras\alinear.py --transcribir      # alinea las que tienen letra y transcribe las que no
+```
+
+Para los MP3 sin letra en la etiqueta (y sin `.lrc` ya hecho), al final de la pasada:
+
+1. **Aísla la voz** con Demucs (`htdemucs`, en GPU) y la guarda en `cache\voz\` (16 kHz, mono).
+2. **Transcribe** la voz aislada con Whisper `large-v3-turbo`, con VAD (Silero) y sin arrastrar el
+   texto anterior entre ventanas (evita bucles). El idioma se detecta del audio, en los 30 s con
+   más voz (el principio suele ser instrumental).
+3. **Filtra** lo que Whisper se inventa: frases típicas de tramos sin voz («Gracias por ver»,
+   «Suscríbete», «Amara.org», «Música», «¡Gracias!»…), segmentos sin voz (`no_speech_prob` > 0,6
+   **y** `avg_logprob` < −0,5), de confianza muy baja (`avg_logprob` < −1), con palabras
+   improbables (probabilidad media < 0,1), repetitivos (`compression_ratio` > 2,4) y bucles (el
+   mismo texto por tercera vez seguida). `no_speech_prob` solo no sirve con voz cantada:
+   large-v3 dio 0,76–0,97 en estrofas transcritas a la perfección y turbo da siempre ~0.
+4. **Agrupa en versos**: corta en las pausas (≥ 0,6 s), tras punto, antes de `¿`/`¡` y al cambiar
+   de segmento, sin pasar de 60 caracteres (si no cabe, corta en la última coma).
+5. Con menos de 15 palabras útiles la canción se da por **instrumental**: no se escribe nada
+   (y se vuelve a intentar en la siguiente pasada con `--transcribir`).
+6. Escribe `<nombre>.lrc` con la cabecera `[by:Transcripción automática (Whisper), revisar]` y
+   `<nombre>.txt` con la letra en texto plano para revisarla: `[?]` detrás de las palabras con
+   probabilidad < 0,4 y una línea en blanco entre estrofas (silencios ≥ 4 s).
+7. **Confianza**: vuelve a transcribir con `large-v3` y da el porcentaje de coincidencia palabra
+   a palabra entre los dos modelos. Por debajo del 60 % avisa de revisar la letra entera.
+
+Los modelos se cargan de uno en uno (large-v3 en fp16 ocupa ~3,4 GB de VRAM, justo en 4 GB) y
+sin pasar por la RAM: el punto de control se abre con mmap y el modelo se crea directamente en
+la GPU en fp16. Los `.lrc`/`.txt` se escriben en cuanto termina el modelo principal; si el
+contraste falla o el equipo va justo de memoria, no se pierden (`--contraste ninguno` se lo
+salta del todo).
+
+Por qué esta configuración (medido con «Caminar descalzo», cuya letra real se conoce: 373
+palabras; WER = palabras mal sobre el total):
+
+| | mezcla sin separar | voz aislada (Demucs) |
+| --- | --- | --- |
+| `large-v3-turbo` | WER 23 % · 15 s | **WER 3 %** · 35 s · 1,6 GB VRAM |
+| `large-v3` | WER 23 % · 41 s | WER 3 % · 49 s · 3,4 GB VRAM |
+
+En una salsa (`track-1-salsa`) sin separar la voz solo salen 125 palabras; con la voz aislada,
+337 (turbo) y 305 (large-v3, que además se saltó 0:11–0:33 y escribió «Gracias.» en su lugar).
+Por eso: voz aislada siempre, turbo como modelo principal (igual de preciso, más completo y
+3 veces más rápido) y large-v3 como contraste.
+
 ## Avisos del resumen
 
 Al final se lista cada canción con idioma, número de versos y tiempo (en una RTX 3050 Ti de
@@ -81,4 +134,5 @@ letra cubre poco de la canción (letra incompleta en la etiqueta), el primer ver
 0:00, varios versos sin separación entre sí, versos que stable-ts no pudo alinear y, con
 `--verificar`, los versos en los que lo transcrito no coincide con la letra. Un aviso no
 significa que el `.lrc` esté mal, sino que conviene escuchar ese tramo. Las canciones sin letra
-se saltan.
+se saltan, salvo con `--transcribir`: entonces el resumen da idioma, versos, confianza (coincidencia
+entre los dos modelos), palabras dudosas y segmentos descartados, o «instrumental».

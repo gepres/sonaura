@@ -4,3 +4,5 @@
 stable-ts==2.19.1
 openai-whisper==20250625
 mutagen==1.48.1
+# Solo para --transcribir (aísla la voz antes de transcribir):
+demucs==4.1.0

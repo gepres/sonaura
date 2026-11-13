@@ -437,16 +437,51 @@ def cargar_modelo(nombre: str, dispositivo: str):
 
     if dispositivo == "auto":
         dispositivo = "cuda" if torch.cuda.is_available() else "cpu"
-    modelo = stable_whisper.load_model(nombre, device="cpu")
-    if dispositivo == "cuda":
-        # Pesos en fp16 (la mitad de VRAM: cabe en 4 GB); LayerNorm se queda en fp32
-        # porque Whisper la calcula en float32.
-        modelo.half()
-        for m in modelo.modules():
-            if isinstance(m, torch.nn.LayerNorm):
-                m.float()
-    modelo.to(dispositivo)
-    return modelo, dispositivo
+    if dispositivo != "cuda":
+        return stable_whisper.load_model(nombre, device="cpu"), dispositivo
+
+    # En GPU los pesos van en fp16 (la mitad de VRAM: large-v3 cabe en 4 GB). Para no llenar la
+    # RAM (el sistema ya mató el proceso una vez al cargar large-v3 por la vía normal, que lee el
+    # archivo entero para comprobarlo, lo carga y crea el modelo en fp32), el punto de control se
+    # abre con mmap y el modelo se construye directamente en la GPU y en fp16.
+    import whisper
+    from whisper.model import ModelDimensions, Whisper
+    from stable_whisper.whisper_word_level.original_whisper import modify_model
+
+    raiz = os.path.join(os.getenv("XDG_CACHE_HOME", os.path.join(os.path.expanduser("~"), ".cache")),
+                        "whisper")
+    ruta = nombre
+    if nombre in whisper._MODELS:
+        ruta = os.path.join(raiz, os.path.basename(whisper._MODELS[nombre]))
+        if not os.path.isfile(ruta):  # la primera vez: descarga y comprueba el SHA-256
+            ruta = whisper._download(whisper._MODELS[nombre], raiz, False)
+    punto = torch.load(ruta, map_location="cpu", weights_only=True, mmap=True)
+    previo = torch.get_default_dtype()
+    torch.set_default_dtype(torch.float16)
+    try:
+        with torch.device("cuda"):
+            modelo = Whisper(ModelDimensions(**punto["dims"]))
+    finally:
+        torch.set_default_dtype(previo)
+    modelo.load_state_dict(punto["model_state_dict"])
+    del punto
+    if nombre in whisper._ALIGNMENT_HEADS:
+        modelo.set_alignment_heads(whisper._ALIGNMENT_HEADS[nombre])
+    for m in modelo.modules():  # Whisper calcula LayerNorm en float32
+        if isinstance(m, torch.nn.LayerNorm):
+            m.float()
+    modify_model(modelo)  # añade transcribe/align de stable-ts
+    return modelo.to("cuda"), dispositivo
+
+
+def liberar_gpu() -> None:
+    """Devuelve la VRAM de los modelos que ya no se usan (quien llama suelta antes su referencia)."""
+    import gc
+    import torch
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 def alinear(modelo, audio, lineas: list[Linea], idioma: str) -> dict:
@@ -549,6 +584,323 @@ def verificar(modelo, audio, lineas: list[Linea], idioma: str, n: int) -> list[d
 
 
 # ---------------------------------------------------------------------------
+# Transcripción de las canciones sin letra (--transcribir)
+# ---------------------------------------------------------------------------
+
+MODELO_TRANSCRIPCION = "large-v3-turbo"  # medido: mismo WER que large-v3, más completo en salsa, 3× más rápido
+MODELO_CONTRASTE = "large-v3"
+AUTOR_TRANSCRIPCION = "Transcripción automática (Whisper), revisar"
+SR = 16000
+MAX_VERSO = 60        # caracteres por línea transcrita
+PAUSA_VERSO = 0.6     # segundos de silencio que cortan un verso
+PAUSA_ESTROFA = 4.0   # segundos de silencio que separan estrofas en el .txt
+PROB_DUDOSA = 0.4     # palabra con probabilidad menor: «[?]» en el .txt
+# Filtro de segmentos. no_speech_prob por sí solo no sirve con voz cantada: large-v3 da 0,76–0,97
+# en estrofas transcritas a la perfección (y turbo da siempre ~0), así que, como hace Whisper, solo
+# cuenta junto con un avg_logprob flojo. Las estrofas reales salen con avg_logprob de −0,1 a −0,4.
+NO_VOZ_MAX = 0.6       # no_speech_prob mayor…
+LOGPROB_NO_VOZ = -0.5  # …y avg_logprob menor que esto: tramo sin voz, se descarta
+LOGPROB_MIN = -1.0     # avg_logprob menor: confianza muy baja, se descarta
+PROB_SEGMENTO_MIN = 0.1  # probabilidad media de las palabras menor: invención («Gracias.» da 0,00)
+COMPRESION_MAX = 2.4   # segmento más repetitivo que esto (zlib): bucle, se descarta
+MIN_PALABRAS = 15     # con menos palabras útiles la canción se da por instrumental
+
+# Frases que Whisper se inventa en tramos sin voz (vienen de los subtítulos con que se entrenó).
+_ALUCINACIONES = re.compile(
+    r"gracias por (ver|mirar|escuchar|su atencion)|suscribete|suscribanse|amara ?org|subtitulos|"
+    r"sottotitoli|untertitel|thanks? (you )?for watching|dale like|"
+    r"^(musica|musik|music|musica de fondo|aplausos|risas|silencio|instrumental)$|"
+    r"^(muchas )?gracias$|^grazie( a tutti| mille)?$|^danke( schon)?$|^thank you$|^amen$|^$"
+)
+
+
+@dataclass
+class Palabra:
+    texto: str
+    inicio: float
+    fin: float
+    prob: float
+
+
+@dataclass
+class Transcripcion:
+    idioma: str
+    segmentos: list[list[Palabra]]        # lo que pasa el filtro
+    descartados: list[tuple[float, str, str]] = field(default_factory=list)  # (inicio, texto, motivo)
+    segundos: float = 0.0
+
+    def palabras(self) -> list[str]:
+        return [_normal(p.texto) for s in self.segmentos for p in s if _normal(p.texto)]
+
+
+def _plano(texto: str) -> str:
+    """Minúsculas, sin tildes ni signos: para comparar frases."""
+    t = unicodedata.normalize("NFKD", texto.casefold())
+    t = "".join(c if c.isalnum() or c.isspace() else " " for c in t if not unicodedata.combining(c))
+    return " ".join(t.split())
+
+
+def _clave_audio(ruta: Path) -> str:
+    import hashlib
+
+    st = ruta.stat()
+    return hashlib.sha1(f"{ruta.resolve()}|{st.st_size}|{int(st.st_mtime)}".encode()).hexdigest()[:16]
+
+
+def separar_voces(rutas: list[Path], cache: Path, nombres: dict[Path, str] | None = None
+                  ) -> dict[Path, tuple[Path, float]]:
+    """Aísla la voz de cada MP3 con Demucs (htdemucs) y la guarda en caché (16 kHz, mono, .npy).
+    Devuelve, por MP3, el .npy y los segundos que costó (0 si ya estaba en caché)."""
+    import numpy as np
+    import torch
+
+    salida = {r: (cache / "voz" / f"{_clave_audio(r)}.npy", 0.0) for r in rutas}
+    faltan = [r for r, (d, _) in salida.items() if not d.exists()]
+    if faltan:
+        from stable_whisper.audio.demucs import demucs_audio, load_demucs_model
+
+        dispositivo = "cuda" if torch.cuda.is_available() else "cpu"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            demucs = load_demucs_model(cache=False)
+            for r in faltan:
+                print(f"  separando la voz (Demucs): {(nombres or {}).get(r, r.name)}")
+                t0 = time.perf_counter()
+                voz = demucs_audio(str(r), output_sr=SR, model=demucs, device=dispositivo, verbose=None)
+                voz = voz.float()
+                if voz.dim() > 1:
+                    voz = voz.mean(dim=0)
+                destino = salida[r][0]
+                destino.parent.mkdir(parents=True, exist_ok=True)
+                np.save(destino, voz.cpu().numpy().astype(np.float32))
+                salida[r] = (destino, time.perf_counter() - t0)
+        demucs = None
+        liberar_gpu()
+    return salida
+
+
+def idioma_de_voz(modelo, voz) -> tuple[str, float]:
+    """Detecta el idioma en los 30 s con más voz (no al principio, que suele ser instrumental)."""
+    import numpy as np
+    import torch
+    import whisper
+
+    n = len(voz) // SR
+    ventana = 30
+    inicio = 0
+    if n > ventana:
+        energia = np.sqrt(np.mean(voz[: n * SR].reshape(n, SR) ** 2, axis=1))
+        inicio = int(np.argmax(np.convolve(energia, np.ones(ventana), "valid")))
+    trozo = whisper.pad_or_trim(np.ascontiguousarray(voz[inicio * SR:(inicio + ventana) * SR]))
+    mel = whisper.log_mel_spectrogram(trozo, n_mels=modelo.dims.n_mels)
+    with torch.no_grad():
+        _, probs = modelo.detect_language(mel.to(modelo.device, dtype=_dtype(modelo)))
+    mejor = max(probs, key=probs.get)
+    return mejor, float(probs[mejor])
+
+
+def transcribir_voz(modelo, voz, idioma: str, vad: bool = True) -> Transcripcion:
+    """Transcribe y descarta lo que no es letra: alucinaciones típicas, segmentos sin voz o
+    de muy baja confianza y bucles (el mismo texto tres veces seguidas)."""
+    import torch
+
+    t0 = time.perf_counter()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        r = modelo.transcribe(voz, language=idioma, fp16=_dtype(modelo) != torch.float32,
+                              verbose=None, regroup=False, vad=vad, word_timestamps=True,
+                              condition_on_previous_text=False)
+    tr = Transcripcion(idioma, [])
+    recientes: list[str] = []
+    for s in r.segments:
+        plano = _plano(s.text)
+        motivo = None
+        if _ALUCINACIONES.search(plano):
+            motivo = "alucinación típica"
+        elif (s.no_speech_prob or 0) > NO_VOZ_MAX and (s.avg_logprob or 0) < LOGPROB_NO_VOZ:
+            motivo = f"sin voz (no_speech_prob {s.no_speech_prob:.2f}, avg_logprob {s.avg_logprob:.2f})"
+        elif (s.avg_logprob or 0) < LOGPROB_MIN:
+            motivo = f"confianza muy baja (avg_logprob {s.avg_logprob:.2f})"
+        elif s.words and sum(w.probability or 0 for w in s.words) / len(s.words) < PROB_SEGMENTO_MIN:
+            motivo = "palabras improbables"
+        elif (s.compression_ratio or 0) > COMPRESION_MAX:
+            motivo = "texto repetitivo"
+        elif recientes[-2:] == [plano, plano]:
+            motivo = "bucle"
+        if motivo:
+            tr.descartados.append((s.start, s.text.strip(), motivo))
+            continue
+        palabras = [Palabra(w.word.strip(), w.start, w.end, float(w.probability or 0))
+                    for w in s.words if w.word.strip()]
+        if palabras:
+            tr.segmentos.append(palabras)
+            recientes.append(plano)
+    tr.segundos = time.perf_counter() - t0
+    return tr
+
+
+def agrupar_versos(segmentos: list[list[Palabra]]) -> list[list[Palabra]]:
+    """Versos legibles: corta en las pausas, tras punto, antes de «¿»/«¡» y al cambiar de
+    segmento, sin pasar de MAX_VERSO caracteres (si no cabe, corta en la última coma)."""
+    versos: list[list[Palabra]] = []
+    actual: list[Palabra] = []
+
+    def largo(ps):
+        return len(" ".join(p.texto for p in ps))
+
+    for seg in segmentos:
+        for i, p in enumerate(seg):
+            if actual:
+                previa = actual[-1]
+                if (p.inicio - previa.fin >= PAUSA_VERSO or previa.texto.endswith((".", "?", "!", "…"))
+                        or p.texto.startswith(("¿", "¡")) or (i == 0 and len(actual) >= 3)):
+                    versos.append(actual)
+                    actual = []
+                elif largo(actual) + 1 + len(p.texto) > MAX_VERSO:
+                    comas = [j for j, x in enumerate(actual[:-1]) if x.texto.endswith((",", ";", ":"))]
+                    j = comas[-1] + 1 if comas and largo(actual[:comas[-1] + 1]) >= MAX_VERSO * 0.4 else len(actual)
+                    versos.append(actual[:j])
+                    actual = actual[j:]
+            actual.append(p)
+    if actual:
+        versos.append(actual)
+    return versos
+
+
+def _con_duda(p: Palabra) -> str:
+    if p.prob >= PROB_DUDOSA:
+        return p.texto
+    m = re.match(r"^(.*?)([.,;:!?…»”\"')]*)$", p.texto)
+    return f"{m.group(1)}[?]{m.group(2)}"
+
+
+def coincidencia(a: list[str], b: list[str]) -> float:
+    """Parecido entre dos transcripciones (0–1), palabra a palabra."""
+    if not a and not b:
+        return 1.0
+    return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
+
+
+def escribir_transcripcion(destino: Path, versos: list[list[Palabra]], titulo: str | None,
+                           album: str | None, duracion: float) -> None:
+    """`<nombre>.lrc` (con [by:…]) y `<nombre>.txt` con «[?]» tras las palabras dudosas."""
+    lineas = [Linea(" ".join(p.texto for p in v), False, v[0].inicio, v[-1].fin) for v in versos]
+    escribir_lrc(destino, lineas, titulo, album, duracion, autor=AUTOR_TRANSCRIPCION)
+    filas = []
+    for k, v in enumerate(versos):
+        if k and v[0].inicio - versos[k - 1][-1].fin >= PAUSA_ESTROFA:
+            filas.append("")
+        filas.append(" ".join(_con_duda(p) for p in v))
+    destino.with_suffix(".txt").write_bytes(("\n".join(filas) + "\n").encode("utf-8"))
+
+
+def transcribir_pendientes(pendientes: list[tuple[Cancion, Etiquetas, Resumen]], args) -> None:
+    """Fase de transcripción: descarga, aísla la voz de todas (Demucs) y transcribe con el modelo
+    principal y luego con el de contraste, de uno en uno para no juntar dos modelos en la GPU."""
+    import numpy as np
+    import whisper
+    from mutagen.mp3 import MP3
+
+    print(f"\n▶ Transcripción de {len(pendientes)} canciones sin letra")
+    rutas: dict[str, Path] = {}
+    for item in list(pendientes):
+        cancion, _, res = item
+        t0 = time.perf_counter()
+        try:
+            rutas[cancion.etiqueta] = descargar(cancion, args.cache)
+        except Exception as e:
+            res.estado = f"error: {e}"
+            pendientes.remove(item)
+        res.segundos += time.perf_counter() - t0
+    if not pendientes:
+        return
+    voces: dict[str, Path] = {}
+    if not args.sin_separar:
+        separadas = separar_voces(list(rutas.values()), args.cache, {r: e for e, r in rutas.items()})
+        for cancion, _, res in pendientes:
+            npy, segundos = separadas[rutas[cancion.etiqueta]]
+            voces[cancion.etiqueta] = npy
+            res.segundos += segundos
+
+    def audio_de(cancion):
+        if args.sin_separar:
+            return whisper.load_audio(str(rutas[cancion.etiqueta]))
+        return np.load(voces[cancion.etiqueta])
+
+    resultados: dict[str, dict[str, Transcripcion]] = {c.etiqueta: {} for c, _, _ in pendientes}
+    idiomas: dict[str, str] = {}
+
+    def transcribir_con(nombre: str, principal: bool) -> None:
+        print(f"  cargando modelo {nombre}…")
+        modelo, _ = cargar_modelo(nombre, args.dispositivo)
+        for cancion, _, res in pendientes:
+            if res.estado.startswith(("error", "instrumental")):
+                continue
+            try:
+                audio = audio_de(cancion)
+                if cancion.etiqueta not in idiomas:
+                    idiomas[cancion.etiqueta] = args.idioma or idioma_de_voz(modelo, audio)[0]
+                tr = transcribir_voz(modelo, audio, idiomas[cancion.etiqueta])
+                resultados[cancion.etiqueta][nombre] = tr
+                res.segundos += tr.segundos
+                print(f"  {nombre} · {cancion.etiqueta}: {len(tr.palabras())} palabras "
+                      f"({tr.segundos:.0f} s)")
+                if principal:
+                    for inicio, texto, motivo in tr.descartados:
+                        print(f"      descartado en {marca(inicio)} [{motivo}]: {texto[:70]}")
+            except Exception as e:
+                if principal:
+                    res.estado = f"error: {e}"
+                else:
+                    res.avisos.append(f"sin contraste ({nombre}): {e}")
+                print(f"  ERROR en {cancion.etiqueta}: {e}")
+        modelo = None
+        liberar_gpu()
+
+    # 1) Modelo principal. Los archivos se escriben ya: si el contraste falla, no se pierden.
+    transcribir_con(args.modelo_transcripcion, principal=True)
+    for cancion, etiquetas, res in pendientes:
+        if res.estado.startswith("error"):
+            continue
+        tr = resultados[cancion.etiqueta][args.modelo_transcripcion]
+        res.idioma = f"{tr.idioma} (audio)"
+        if tr.descartados:
+            motivos: dict[str, int] = {}
+            for _, _, motivo in tr.descartados:
+                clave = motivo.split(" (")[0]
+                motivos[clave] = motivos.get(clave, 0) + 1
+            res.avisos.append("segmentos descartados: " + ", ".join(f"{n} por {m}" for m, n in motivos.items()))
+        palabras = [p for s in tr.segmentos for p in s]
+        if len(palabras) < MIN_PALABRAS:
+            res.estado = "instrumental (no se escribe nada)"
+            continue
+        versos = agrupar_versos(tr.segmentos)
+        album = etiquetas.album or (Path(cancion.carpeta).name if cancion.carpeta else None)
+        escribir_transcripcion(res.lrc, versos, etiquetas.titulo or cancion.base, album,
+                               MP3(rutas[cancion.etiqueta]).info.length or 0.0)
+        res.estado = "transcrito"
+        res.versos = len(versos)
+        res.palabras = len(palabras)
+        res.dudosas = sum(1 for p in palabras if p.prob < PROB_DUDOSA)
+        print(f"  → {res.lrc} (+ .txt)")
+
+    # 2) Contraste: la misma voz con otro modelo; la coincidencia palabra a palabra es la confianza.
+    if args.contraste in ("ninguno", args.modelo_transcripcion):
+        return
+    if not any(res.estado == "transcrito" for _, _, res in pendientes):
+        return
+    transcribir_con(args.contraste, principal=False)
+    for cancion, _, res in pendientes:
+        otra = resultados[cancion.etiqueta].get(args.contraste)
+        if res.estado != "transcrito" or otra is None:
+            continue
+        principal = resultados[cancion.etiqueta][args.modelo_transcripcion]
+        res.confianza = coincidencia(principal.palabras(), otra.palabras())
+        if res.confianza < 0.6:
+            res.avisos.append("los dos modelos discrepan mucho: revisar la letra entera")
+
+
+# ---------------------------------------------------------------------------
 # LRC
 # ---------------------------------------------------------------------------
 
@@ -558,12 +910,14 @@ def marca(segundos: float) -> str:
 
 
 def escribir_lrc(destino: Path, lineas: list[Linea], titulo: str | None, album: str | None,
-                 duracion: float) -> None:
+                 duracion: float, autor: str | None = None) -> None:
     filas = []
     if titulo:
         filas.append(f"[ti:{titulo}]")
     if album:
         filas.append(f"[al:{album}]")
+    if autor:
+        filas.append(f"[by:{autor}]")
     total = round(duracion)
     filas.append(f"[length:{total // 60:02d}:{total % 60:02d}]")
     for ln in lineas:
@@ -588,6 +942,9 @@ class Resumen:
     segundos: float = 0.0
     avisos: list[str] = field(default_factory=list)
     lrc: Path | None = None
+    confianza: float | None = None  # solo transcripciones: coincidencia con el modelo de contraste
+    palabras: int = 0
+    dudosas: int = 0
 
 
 def avisos_de_calidad(lineas: list[Linea], duracion: float, stats: dict) -> list[str]:
@@ -636,6 +993,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--sin-partir", action="store_true", help="no parte los versos largos en frases")
     ap.add_argument("--verificar", type=int, default=0, metavar="N",
                     help="transcribe N versos por canción y compara con la letra (control de calidad)")
+    ap.add_argument("--transcribir", action="store_true",
+                    help="transcribe con Whisper las canciones SIN letra (si no, se saltan)")
+    ap.add_argument("--modelo-transcripcion", default=MODELO_TRANSCRIPCION,
+                    help=f"modelo para transcribir (por defecto {MODELO_TRANSCRIPCION})")
+    ap.add_argument("--contraste", default=MODELO_CONTRASTE,
+                    help=f"segundo modelo para medir la confianza (por defecto {MODELO_CONTRASTE}; «ninguno» lo omite)")
+    ap.add_argument("--sin-separar", action="store_true",
+                    help="transcribe la mezcla tal cual, sin aislar la voz con Demucs")
     args = ap.parse_args(argv)
 
     if args.carpeta:
@@ -650,6 +1015,7 @@ def main(argv: list[str] | None = None) -> int:
 
     modelo = dispositivo = None
     resumenes: list[Resumen] = []
+    pendientes: list[tuple[Cancion, Etiquetas, Resumen]] = []
     for cancion in canciones:
         destino = args.salida / cancion.carpeta / f"{cancion.base}.lrc"
         res = Resumen(cancion.etiqueta, "", lrc=destino)
@@ -663,8 +1029,13 @@ def main(argv: list[str] | None = None) -> int:
             fuente = cancion.ruta if cancion.ruta else etiqueta_remota(cancion, args.cache)
             etiquetas = leer_etiquetas(fuente)
             if not etiquetas.letra:
-                res.estado = "sin letra (saltada)"
-                print("  sin letra en la etiqueta ID3: se salta")
+                if args.transcribir:
+                    res.estado = "pendiente de transcribir"
+                    pendientes.append((cancion, etiquetas, res))
+                    print("  sin letra en la etiqueta ID3: se transcribirá al final")
+                else:
+                    res.estado = "sin letra (saltada)"
+                    print("  sin letra en la etiqueta ID3: se salta (usa --transcribir)")
                 continue
             lineas = preparar(etiquetas.letra, partir=not args.sin_partir)
             versos = [ln.texto for ln in lineas if not ln.encabezado]
@@ -715,13 +1086,29 @@ def main(argv: list[str] | None = None) -> int:
             if res.estado == "generado":
                 print(f"  → {destino} ({res.segundos:.0f} s)")
 
+    if pendientes:
+        if modelo is not None:  # deja la GPU libre para Demucs y el modelo de transcripción
+            modelo = None
+            liberar_gpu()
+        transcribir_pendientes(pendientes, args)
+
     print("\n=== Resumen ===")
-    if modelo is not None:
-        print(f"modelo {args.modelo} en {dispositivo}")
+    if dispositivo is not None:
+        print(f"alineación: modelo {args.modelo} en {dispositivo}")
+    if pendientes:
+        contraste = "" if args.contraste == "ninguno" else f", contraste {args.contraste}"
+        print(f"transcripción: modelo {args.modelo_transcripcion}{contraste}, "
+              f"{'sin separar la voz' if args.sin_separar else 'voz aislada con Demucs'}, VAD")
     for r in resumenes:
         linea = f"- {r.cancion}: {r.estado}"
         if r.estado == "generado":
             linea += f" · {r.idioma} · {r.versos} versos, {r.secciones} encabezados · {r.segundos:.0f} s"
+        elif r.estado == "transcrito":
+            confianza = f"confianza {r.confianza:.0%} · " if r.confianza is not None else ""
+            linea += (f" · {r.idioma} · {r.versos} versos · {confianza}{r.dudosas} de {r.palabras} "
+                      f"palabras dudosas · {r.segundos:.0f} s")
+        elif r.estado.startswith("instrumental"):
+            linea += f" · {r.segundos:.0f} s"
         print(linea)
         for a in r.avisos:
             print(f"    aviso: {a}")
