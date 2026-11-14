@@ -1,10 +1,16 @@
 import type { Track } from '@/catalog';
+import { freshList } from '@/player/freshTracks';
 import { usePlayer } from '@/player/store';
 import { useDownloads } from '@/state/downloads';
+import { useLibrary } from '@/state/library';
 import { useNetwork } from '@/state/network';
 
-/** Sin conexión solo entran a la cola las pistas descargadas. */
-export function playable(tracks: Track[]): Track[] {
+/**
+ * Lo que entra en la cola, en su versión de la biblioteca (favoritos y descargas guardan copias
+ * que pueden no saber de un `.lrc` nuevo). Sin conexión solo entran las pistas descargadas.
+ */
+export function playable(context: Track[]): Track[] {
+  const tracks = freshList(context, useLibrary.getState().tracksById);
   if (useNetwork.getState().online) return tracks;
   const items = useDownloads.getState().items;
   return tracks.filter((t) => items[t.id]);

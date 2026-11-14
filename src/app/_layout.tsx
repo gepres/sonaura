@@ -8,7 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { initAnalytics } from '@/analytics';
 import { installDesktopChrome } from '@/lib/desktopChrome';
 import { useDesktopShortcuts } from '@/lib/useDesktopShortcuts';
-import { initPlayer } from '@/player/store';
+import { initPlayer, usePlayer } from '@/player/store';
 import { useDownloads } from '@/state/downloads';
 import { fileStore } from '@/state/fileStore';
 import { useLibrary } from '@/state/library';
@@ -61,6 +61,17 @@ export default function RootLayout() {
       void useDownloads.getState().reconcile();
       void useLibrary.getState().refresh();
     });
+  }, []);
+
+  // La sesión guardada lleva copias de las pistas de la cola: cuando la biblioteca cambia (un
+  // .lrc nuevo en Drive, un título corregido) se ponen al día, también al retomar la sesión.
+  useEffect(() => {
+    const sync = () => usePlayer.getState().syncTracks(useLibrary.getState().tracksById);
+    const unsubscribe = useLibrary.subscribe((s, prev) => {
+      if (s.tracksById !== prev.tracksById) sync();
+    });
+    void Promise.all([whenHydrated(usePlayer), whenHydrated(useLibrary)]).then(sync);
+    return unsubscribe;
   }, []);
 
   if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;

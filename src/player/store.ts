@@ -16,6 +16,8 @@ import { localCoverUri, localTrackUri } from '@/state/downloads';
 import { useNetwork } from '@/state/network';
 import { safeStorage } from '@/state/storage';
 
+import { withFreshTracks } from './freshTracks';
+
 import {
   createQueue,
   currentTrackId,
@@ -54,6 +56,8 @@ type PlayerState = {
   muted: boolean;
 
   playTracks: (tracks: Track[], startIndex: number, opts?: { shuffle?: boolean }) => void;
+  /** Pone al día las copias de la cola con la biblioteca recién leída de Drive. */
+  syncTracks: (library: Record<string, Track>) => void;
   togglePlay: () => void;
   next: () => void;
   previous: () => void;
@@ -216,6 +220,11 @@ export const usePlayer = create<PlayerState>()(
           );
           set({ queue, queueTracks, shuffle, notice: null });
           loadAt(queue.position, true);
+        },
+
+        syncTracks: (library) => {
+          const queueTracks = withFreshTracks(get().queueTracks, library);
+          if (queueTracks) set({ queueTracks });
         },
 
         togglePlay: () => {
