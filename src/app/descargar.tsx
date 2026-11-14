@@ -10,8 +10,8 @@ import { PillButton } from '@/components/ui';
 import { APP_NAME } from '@/config';
 import { formatBytes } from '@/lib/format';
 import { usePwaInstall, type PwaInstall } from '@/lib/pwa';
-import { RELEASES_PAGE, downloadUrl, useLatestRelease, type AssetKey } from '@/lib/releases';
-import { isPhone, visitorOs, type VisitorOs } from '@/lib/userAgent';
+import { RELEASES_PAGE, chromeIntentUrl, downloadUrl, useLatestRelease, type AssetKey } from '@/lib/releases';
+import { isBraveBrowser, isPhone, visitorOs, type VisitorOs } from '@/lib/userAgent';
 import { useSeo } from '@/lib/seo';
 import { colors, radius, space, typo } from '@/theme';
 
@@ -26,6 +26,12 @@ function download(key: AssetKey) {
   // En la web, la misma pestaña: GitHub responde con el archivo y la página se queda donde está.
   if (Platform.OS === 'web') window.location.assign(url);
   else void Linking.openURL(url);
+}
+
+/** El APK abierto en Chrome (solo Android): otros navegadores, como Brave, a veces no terminan la descarga. */
+function downloadWithChrome(key: AssetKey) {
+  track('app_descargada', { sistema: key, via: 'chrome' });
+  window.location.assign(chromeIntentUrl(downloadUrl(key)));
 }
 
 const sizeLabel = (bytes: number | undefined) => (bytes ? ` · ${formatBytes(bytes)}` : '');
@@ -113,6 +119,9 @@ export default function DownloadScreen() {
   // En el celular, instalar la web es lo más rápido (y en iPhone, lo único). En un computador
   // que no es Windows, también, si el navegador lo ofrece.
   const pwaFirst = phone || (os !== 'Windows' && pwa.canPrompt);
+  // En Android con Brave, el APK se baja con Chrome: Brave a veces lo deja en «Descargando…».
+  const braveOnAndroid = Platform.OS === 'web' && os === 'Android' && isBraveBrowser();
+  const getApk = (key: AssetKey) => (braveOnAndroid ? downloadWithChrome(key) : download(key));
 
   useEffect(() => {
     track('descargas_vista', { sistema_visitante: os });
@@ -125,19 +134,47 @@ export default function DownloadScreen() {
       title="Android"
       detail={`Android 7 o superior · APK${sizeLabel(release.sizes.android)}`}
       recommended={os === 'Android' && !pwaFirst}
-      action={<PillButton label="Descargar para Android" icon="install" onPress={() => download('android')} />}
+      action={
+        braveOnAndroid ? (
+          <View style={styles.actionStack}>
+            <Text style={styles.warn}>
+              Estás en Brave, que a veces deja el APK en «Descargando…» sin terminar. Descárgalo con Chrome.
+            </Text>
+            <PillButton label="Descargar con Chrome" icon="install" onPress={() => downloadWithChrome('android')} />
+            <Text style={styles.alt}>
+              ¿No tienes Chrome?{' '}
+              <Text style={styles.link} onPress={() => download('android')} accessibilityRole="link">
+                Descargar con Brave
+              </Text>
+            </Text>
+          </View>
+        ) : (
+          <PillButton label="Descargar para Android" icon="install" onPress={() => download('android')} />
+        )
+      }
       steps={[
         'Abre el archivo descargado, desde la notificación o desde la carpeta Descargas.',
         'Si Android lo pide, permite «Instalar apps desconocidas» para tu navegador.',
         'Si dice «App no instalada», desinstala la versión anterior de Sonaura y vuelve a abrirlo.',
       ]}
       footer={
-        <Text style={styles.alt}>
-          ¿Teléfono antiguo de 32 bits?{' '}
-          <Text style={styles.link} onPress={() => download('androidUniversal')} accessibilityRole="link">
-            Versión universal{sizeLabel(release.sizes.androidUniversal)}
+        <View style={styles.actionStack}>
+          <Text style={styles.alt}>
+            ¿Teléfono antiguo de 32 bits?{' '}
+            <Text style={styles.link} onPress={() => getApk('androidUniversal')} accessibilityRole="link">
+              Versión universal{sizeLabel(release.sizes.androidUniversal)}
+            </Text>
           </Text>
-        </Text>
+          {os === 'Android' && !braveOnAndroid ? (
+            <Text style={styles.alt}>
+              ¿Se queda en «Descargando…» y no termina? Pasa con algunos navegadores, como Brave:{' '}
+              <Text style={styles.link} onPress={() => downloadWithChrome('android')} accessibilityRole="link">
+                descárgalo con Chrome
+              </Text>
+              .
+            </Text>
+          ) : null}
+        </View>
       }
     />
   );
@@ -264,6 +301,8 @@ const styles = StyleSheet.create({
   stepText: { ...typo.caption, flex: 1, lineHeight: 19 },
   alt: { ...typo.caption },
   done: { ...typo.body, color: colors.textMuted },
+  actionStack: { gap: space.sm },
+  warn: { ...typo.caption, color: colors.amber, lineHeight: 19 },
   link: { color: colors.magenta, fontWeight: '700', textDecorationLine: 'underline' },
   footer: { ...typo.caption, textAlign: 'center', color: colors.textFaint },
 });

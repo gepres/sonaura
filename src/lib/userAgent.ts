@@ -11,6 +11,9 @@ export function osFromUserAgent(ua: string): { os: VisitorOs; deviceType: 'Mobil
   return { os: 'Otro', deviceType: /mobile/i.test(ua) ? 'Mobile' : 'Desktop' };
 }
 
+/** Brave no se identifica en el user agent; lo delata `navigator.brave`. */
+export const isBraveBrowser = (): boolean => typeof navigator !== 'undefined' && 'brave' in navigator;
+
 /** Celular o tableta: donde la web se instala en la pantalla de inicio. */
 export const isPhone = (os: VisitorOs): boolean => os === 'Android' || os === 'iOS';
 

@@ -21,6 +21,16 @@ export type AssetKey = keyof typeof ASSETS;
 
 export const downloadUrl = (key: AssetKey) => `${RELEASES_PAGE}/latest/download/${ASSETS[key]}`;
 
+/**
+ * En Android, un enlace que abre `url` en Chrome aunque el navegador predeterminado sea otro:
+ * Brave, por ejemplo, a veces deja el APK en «Descargando…» sin terminar. Si el teléfono no
+ * tiene Chrome, el navegador actual abre `url` (browser_fallback_url).
+ */
+export function chromeIntentUrl(url: string): string {
+  const target = url.replace(/^https?:\/\//, '');
+  return `intent://${target}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`;
+}
+
 export type ReleaseInfo = {
   version: string;
   publishedAt: Date | null;
