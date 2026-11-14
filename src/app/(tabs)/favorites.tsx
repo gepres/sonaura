@@ -7,12 +7,14 @@ import { TrackRow } from '@/components/TrackRow';
 import { EmptyState, PillButton, StatusBanner } from '@/components/ui';
 import { pluralize } from '@/lib/format';
 import { contentFrame } from '@/lib/layout';
+import { useSeo } from '@/lib/seo';
 import { playAll, playFrom } from '@/player/actions';
 import { sortedFavorites, useFavorites } from '@/state/favorites';
 import { useLibrary } from '@/state/library';
 import { colors, space, typo } from '@/theme';
 
 export default function FavoritesScreen() {
+  useSeo({ title: 'Favoritos', noindex: true });
   const insets = useSafeAreaInsets();
   const items = useFavorites((s) => s.items);
   const tracksById = useLibrary((s) => s.tracksById);

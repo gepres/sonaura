@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { initAnalytics } from '@/analytics';
 import { installDesktopChrome } from '@/lib/desktopChrome';
+import { initPwa } from '@/lib/pwa';
 import { useDesktopShortcuts } from '@/lib/useDesktopShortcuts';
 import { initPlayer, usePlayer } from '@/player/store';
 import { useDownloads } from '@/state/downloads';
@@ -17,6 +18,7 @@ import { colors } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
 installDesktopChrome();
+initPwa();
 
 const theme = {
   ...DarkTheme,

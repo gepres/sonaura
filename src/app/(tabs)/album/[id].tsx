@@ -10,6 +10,7 @@ import { EmptyState, PillButton, StatusBanner } from '@/components/ui';
 import { confirmAction } from '@/lib/confirm';
 import { pluralize } from '@/lib/format';
 import { contentFrame } from '@/lib/layout';
+import { albumDescription, useSeo } from '@/lib/seo';
 import { playAll, playFrom } from '@/player/actions';
 import { downloadsSupported, useDownloads } from '@/state/downloads';
 import { useAlbum } from '@/state/library';
@@ -18,6 +19,7 @@ import { colors, space, typo } from '@/theme';
 export default function AlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const album = useAlbum(id);
+  useSeo(album ? { title: album.title, description: albumDescription(album) } : { noindex: true });
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const downloadedCount = useDownloads((s) => album?.tracks.filter((t) => s.items[t.id]).length ?? 0);

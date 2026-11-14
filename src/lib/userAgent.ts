@@ -11,6 +11,13 @@ export function osFromUserAgent(ua: string): { os: VisitorOs; deviceType: 'Mobil
   return { os: 'Otro', deviceType: /mobile/i.test(ua) ? 'Mobile' : 'Desktop' };
 }
 
+/** Celular o tableta: donde la web se instala en la pantalla de inicio. */
+export const isPhone = (os: VisitorOs): boolean => os === 'Android' || os === 'iOS';
+
 export function visitorOs(): VisitorOs {
-  return typeof navigator === 'undefined' ? 'Otro' : osFromUserAgent(navigator.userAgent ?? '').os;
+  if (typeof navigator === 'undefined') return 'Otro';
+  const { os } = osFromUserAgent(navigator.userAgent ?? '');
+  // Safari en iPad se presenta como un Mac de escritorio; lo delata la pantalla táctil.
+  if (os === 'macOS' && (navigator.maxTouchPoints ?? 0) > 1) return 'iOS';
+  return os;
 }

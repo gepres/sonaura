@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <!-- SEO: valores de la portada. Cada pantalla los pone al día (src/lib/seo.ts); mantener iguales que DEFAULT_*.
+         Sin canonical ni og:url: este HTML se sirve en todas las rutas; los pone cada pantalla. -->
+    <title>Sonaura · Escucha música con letra sincronizada</title>
+    <meta name="description" content="Escucha gratis la música de Sonaura, con letra sincronizada: álbumes, favoritos y mezcla aleatoria. En la web, instalada en tu celular o con la app para Android y Windows." />
+    <meta name="robots" content="index, follow" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Sonaura" />
+    <meta property="og:locale" content="es_ES" />
+    <meta property="og:title" content="Sonaura · Escucha música con letra sincronizada" />
+    <meta property="og:description" content="Escucha gratis la música de Sonaura, con letra sincronizada: álbumes, favoritos y mezcla aleatoria. En la web, instalada en tu celular o con la app para Android y Windows." />
+    <meta property="og:image" content="https://sonaura.genaropretill.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Sonaura: música con letra sincronizada, en la web, el celular, Android y Windows" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Sonaura · Escucha música con letra sincronizada" />
+    <meta name="twitter:description" content="Escucha gratis la música de Sonaura, con letra sincronizada: álbumes, favoritos y mezcla aleatoria. En la web, instalada en tu celular o con la app para Android y Windows." />
+    <meta name="twitter:image" content="https://sonaura.genaropretill.com/og-image.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://sonaura.genaropretill.com/#sitio",
+            "name": "Sonaura",
+            "url": "https://sonaura.genaropretill.com/",
+            "inLanguage": "es"
+          },
+          {
+            "@type": "WebApplication",
+            "name": "Sonaura",
+            "url": "https://sonaura.genaropretill.com/",
+            "description": "Escucha gratis la música de Sonaura, con letra sincronizada: álbumes, favoritos y mezcla aleatoria. En la web, instalada en tu celular o con la app para Android y Windows.",
+            "applicationCategory": "MultimediaApplication",
+            "operatingSystem": "Web, Android, Windows, iOS",
+            "browserRequirements": "Requiere JavaScript",
+            "inLanguage": "es",
+            "image": "https://sonaura.genaropretill.com/icons/icon-512.png",
+            "screenshot": "https://sonaura.genaropretill.com/og-image.png",
+            "downloadUrl": "https://sonaura.genaropretill.com/descargar",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+          }
+        ]
+      }
+    </script>
+    <!-- Instalable como app (PWA). theme-color y el favicon los añade Expo desde app.json. -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Sonaura" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>
+      <h1>Sonaura · Escucha música con letra sincronizada</h1>
+      <p>Escucha gratis la música de Sonaura, con letra sincronizada: álbumes, favoritos y mezcla aleatoria. En la web, instalada en tu celular o con la app para Android y Windows.</p>
+      <p>Sonaura necesita JavaScript para reproducir música. <a href="/descargar">Descarga la app para Android o Windows</a>.</p>
+    </noscript>
+    <div id="root"></div>
+  </body>
+</html>

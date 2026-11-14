@@ -47,6 +47,21 @@ La clave de firma vive fuera del repo (`%USERPROFILE%\.sonaura-firma\`). Los APK
 Windows se publican en GitHub Releases con nombres fijos, y la web los enlaza desde `/descargar`. Todo
 el proceso: [docs/publicar-version.md](docs/publicar-version.md).
 
+## Web: instalable (PWA) y SEO
+
+`npm run web:export` deja la web en `dist-web/` (Netlify) y genera `sitemap.xml` con un enlace por
+álbum de Drive (`scripts/sitemap.mjs`).
+
+- **PWA:** en el celular la web se instala como app: `public/manifest.json`, iconos en `public/icons/`
+  y un service worker mínimo (`public/sw.js`): la página siempre va a la red y solo los archivos
+  con hash se guardan. Se registra desde `src/lib/pwa.web.ts`, nunca dentro de la app de Windows.
+  Inicio y `/descargar` la destacan en el celular. En Android el botón abre el aviso del navegador;
+  en iPhone se muestran los pasos de Safari.
+- **SEO:** `public/index.html` lleva los valores de la portada (título, descripción, Open Graph,
+  JSON-LD). Cada pantalla los pone al día con `useSeo` (`src/lib/seo.ts`): título, descripción,
+  `canonical`, y `noindex` en las personales. `robots.txt` apunta al sitemap.
+  `sonaura-app.netlify.app` redirige al dominio propio (`public/_redirects`).
+
 ## Escritorio (Windows)
 
 La misma app, exportada a web con Expo y envuelta en una ventana nativa con [Tauri v2](https://tauri.app)

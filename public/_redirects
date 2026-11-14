@@ -1,3 +1,7 @@
+# Un solo dominio para los buscadores: el de Netlify (sonaura-app.netlify.app) lleva al propio.
+# Las URL de cada despliegue (<id>--sonaura-app.netlify.app) no cambian.
+https://sonaura-app.netlify.app/*  https://sonaura.genaropretill.com/:splat  301!
+
 # Estadísticas: los eventos entran por el propio dominio y Netlify los pasa a PostHog (región US).
 # Un nombre propio de la app: los bloqueadores de anuncios cortan us.i.posthog.com, /ingest o /analytics.
 # Va antes de la regla de la SPA, que si no se quedaría con /pulso.

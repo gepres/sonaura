@@ -9,8 +9,10 @@ import { Icon, type IconName } from '@/components/Icon';
 import { PillButton } from '@/components/ui';
 import { APP_NAME } from '@/config';
 import { formatBytes } from '@/lib/format';
+import { usePwaInstall, type PwaInstall } from '@/lib/pwa';
 import { RELEASES_PAGE, downloadUrl, useLatestRelease, type AssetKey } from '@/lib/releases';
-import { visitorOs } from '@/lib/userAgent';
+import { isPhone, visitorOs, type VisitorOs } from '@/lib/userAgent';
+import { useSeo } from '@/lib/seo';
 import { colors, radius, space, typo } from '@/theme';
 
 function back() {
@@ -33,15 +35,17 @@ type CardProps = {
   title: string;
   detail: string;
   recommended: boolean;
+  /** Texto de la etiqueta cuando es la recomendada. */
+  badge?: string;
   action: ReactNode;
   steps: string[];
   footer?: ReactNode;
 };
 
-function PlatformCard({ icon, title, detail, recommended, action, steps, footer }: CardProps) {
+function PlatformCard({ icon, title, detail, recommended, badge = 'PARA ESTE DISPOSITIVO', action, steps, footer }: CardProps) {
   return (
     <View style={[styles.card, recommended && styles.cardRecommended]}>
-      {recommended ? <Text style={styles.badge}>PARA ESTE DISPOSITIVO</Text> : null}
+      {recommended ? <Text style={styles.badge}>{badge}</Text> : null}
       <View style={styles.cardHead}>
         <View style={styles.iconWrap}>
           <Icon name={icon} size={28} color={colors.text} />
@@ -65,11 +69,50 @@ function PlatformCard({ icon, title, detail, recommended, action, steps, footer 
   );
 }
 
-/** Página para instalar la app: Android (APK) y Windows (instalador), desde la web. */
+/** Los pasos para instalar la web como app, según el dispositivo y lo que ofrezca el navegador. */
+function pwaSteps(os: VisitorOs, pwa: PwaInstall, phone: boolean): string[] {
+  if (pwa.installed) return [];
+  if (os === 'iOS') {
+    return [
+      'En Safari, toca Compartir: el cuadrado con una flecha hacia arriba.',
+      'Elige «Añadir a pantalla de inicio». Si no aparece, desliza la lista hacia arriba.',
+      'Toca «Añadir»: Sonaura queda en tu pantalla de inicio y se abre como una app.',
+    ];
+  }
+  if (pwa.canPrompt) {
+    return phone
+      ? ['Toca «Instalar en este celular» y confirma.', 'Sonaura aparece entre tus apps y se abre a pantalla completa, sin la barra del navegador.']
+      : ['Toca «Instalar en este equipo» y confirma.', 'Sonaura se abre en su propia ventana, como una app más.'];
+  }
+  if (os === 'Android') {
+    return [
+      'Abre el menú ⋮ del navegador (Chrome, Edge o Samsung Internet).',
+      'Toca «Instalar app» o «Añadir a pantalla de inicio».',
+      'Sonaura aparece entre tus apps y se abre a pantalla completa.',
+    ];
+  }
+  const host = typeof window === 'undefined' ? 'esta web' : window.location.host;
+  return [
+    `Abre ${host} en el navegador de tu celular.`,
+    'Android: menú ⋮ y «Instalar app». iPhone: en Safari, Compartir y «Añadir a pantalla de inicio».',
+  ];
+}
+
+/** Página para instalar la app: la web en el celular (PWA), Android (APK) y Windows (instalador). */
 export default function DownloadScreen() {
+  useSeo({
+    title: 'Descargar para Android, Windows o tu celular',
+    description:
+      'Instala Sonaura en tu celular desde la web (Android y iPhone) o descarga la app para Android y Windows. Gratis y sin crear cuenta.',
+  });
   const insets = useSafeAreaInsets();
   const release = useLatestRelease();
+  const pwa = usePwaInstall();
   const os = visitorOs();
+  const phone = isPhone(os);
+  // En el celular, instalar la web es lo más rápido (y en iPhone, lo único). En un computador
+  // que no es Windows, también, si el navegador lo ofrece.
+  const pwaFirst = phone || (os !== 'Windows' && pwa.canPrompt);
 
   useEffect(() => {
     track('descargas_vista', { sistema_visitante: os });
@@ -81,7 +124,7 @@ export default function DownloadScreen() {
       icon="phone"
       title="Android"
       detail={`Android 7 o superior · APK${sizeLabel(release.sizes.android)}`}
-      recommended={os === 'Android'}
+      recommended={os === 'Android' && !pwaFirst}
       action={<PillButton label="Descargar para Android" icon="install" onPress={() => download('android')} />}
       steps={[
         'Abre el archivo descargado, desde la notificación o desde la carpeta Descargas.',
@@ -114,7 +157,37 @@ export default function DownloadScreen() {
     />
   );
 
-  const cards = os === 'Windows' ? [windows, android] : [android, windows];
+  const web = (
+    <PlatformCard
+      key="pwa"
+      icon="home"
+      title={phone ? 'Instálala en este celular' : pwa.canPrompt ? 'Instálala en este equipo' : 'En tu celular, desde esta web'}
+      detail="Sin descargar archivos · se actualiza sola · Android y iPhone"
+      recommended={pwaFirst}
+      badge={phone ? 'RECOMENDADO PARA TU CELULAR' : undefined}
+      action={
+        pwa.installed ? (
+          <Text style={styles.done}>Ya la tienes instalada: ábrela desde el icono de {APP_NAME}.</Text>
+        ) : pwa.canPrompt ? (
+          <PillButton label={phone ? 'Instalar en este celular' : 'Instalar en este equipo'} icon="install" onPress={() => void pwa.install('descargas')} />
+        ) : null
+      }
+      steps={pwaSteps(os, pwa, phone)}
+      footer={
+        os === 'Android' ? (
+          <Text style={styles.alt}>¿Quieres guardar canciones para escucharlas sin conexión? Para eso está la app de Android, más abajo.</Text>
+        ) : os === 'iOS' ? (
+          <Text style={styles.alt}>Todavía no hay app de iPhone en la App Store: así la tienes en tu pantalla de inicio.</Text>
+        ) : null
+      }
+    />
+  );
+
+  const cards = pwaFirst
+    ? [web, ...(os === 'Windows' ? [windows, android] : [android, windows])]
+    : os === 'Windows'
+      ? [windows, android, web]
+      : [android, windows, web];
   const published = release.publishedAt?.toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
@@ -129,19 +202,10 @@ export default function DownloadScreen() {
         <BrandMark size={64} />
         <Text style={[typo.hero, styles.center]}>Lleva {APP_NAME} contigo</Text>
         <Text style={[typo.body, styles.lead]}>
-          Con la app escuchas sin conexión, con la pantalla apagada y desde los controles del teléfono o del teclado.
+          Instálala en tu celular desde esta web en un momento, o descarga la app de Android o Windows para escuchar
+          también sin conexión.
         </Text>
       </View>
-
-      {os === 'iOS' ? (
-        <View style={[styles.card, styles.cardRecommended]}>
-          <Text style={typo.subtitle}>iPhone y iPad</Text>
-          <Text style={[typo.body, { color: colors.textMuted }]}>
-            Todavía no hay app para iPhone. Puedes usar {APP_NAME} en esta web: en Safari, toca Compartir y luego «Añadir a
-            pantalla de inicio».
-          </Text>
-        </View>
-      ) : null}
 
       {cards}
 
@@ -199,6 +263,7 @@ const styles = StyleSheet.create({
   },
   stepText: { ...typo.caption, flex: 1, lineHeight: 19 },
   alt: { ...typo.caption },
+  done: { ...typo.body, color: colors.textMuted },
   link: { color: colors.magenta, fontWeight: '700', textDecorationLine: 'underline' },
   footer: { ...typo.caption, textAlign: 'center', color: colors.textFaint },
 });

@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { Link } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -23,6 +23,7 @@ import { EmptyState, PillButton, SectionTitle, StatusBanner } from '@/components
 import { APP_NAME } from '@/config';
 import { pluralize } from '@/lib/format';
 import { contentFrame, useAlbumGrid } from '@/lib/layout';
+import { useSeo } from '@/lib/seo';
 import { playAll, playFrom } from '@/player/actions';
 import { useDownloads } from '@/state/downloads';
 import { useLibrary } from '@/state/library';
@@ -45,21 +46,24 @@ function greeting(): string {
 
 function AlbumCard({ album, size }: { album: Album; size: number }) {
   return (
-    <Pressable
-      onPress={() => router.push({ pathname: '/album/[id]', params: { id: album.id } })}
-      style={({ pressed }) => [{ width: size }, pressed && { opacity: 0.8 }]}
-      accessibilityRole="button"
-      accessibilityLabel={`Álbum ${album.title}, ${album.tracks.length} canciones`}>
-      <AlbumArt albumId={album.id} coverUrl={album.coverUrl} title={album.title} size={size} rounded={radius.md} />
-      <Text style={[typo.body, styles.cardTitle]} numberOfLines={1}>
-        {album.title}
-      </Text>
-      <Text style={typo.caption}>{pluralize(album.tracks.length, 'canción', 'canciones')}</Text>
-    </Pressable>
+    // Link: en la web es un <a href="/album/…"> que los buscadores pueden seguir.
+    <Link href={{ pathname: '/album/[id]', params: { id: album.id } }} asChild>
+      <Pressable
+        style={({ pressed }) => [{ width: size }, pressed && { opacity: 0.8 }]}
+        accessibilityRole="link"
+        accessibilityLabel={`Álbum ${album.title}, ${album.tracks.length} canciones`}>
+        <AlbumArt albumId={album.id} coverUrl={album.coverUrl} title={album.title} size={size} rounded={radius.md} />
+        <Text style={[typo.body, styles.cardTitle]} numberOfLines={1}>
+          {album.title}
+        </Text>
+        <Text style={typo.caption}>{pluralize(album.tracks.length, 'canción', 'canciones')}</Text>
+      </Pressable>
+    </Link>
   );
 }
 
 export default function HomeScreen() {
+  useSeo({});
   const insets = useSafeAreaInsets();
   const library = useLibrary((s) => s.library);
   const loading = useLibrary((s) => s.loading);

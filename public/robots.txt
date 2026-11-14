@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /pulso/
+
+Sitemap: https://sonaura.genaropretill.com/sitemap.xml

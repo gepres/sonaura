@@ -14,6 +14,7 @@ import { SeekBar } from '@/components/SeekBar';
 import { EmptyState, SectionTitle } from '@/components/ui';
 import { VolumeControl } from '@/components/VolumeControl';
 import { contentFrame } from '@/lib/layout';
+import { useSeo } from '@/lib/seo';
 import { useLyrics, useLyricsView } from '@/lyrics/store';
 import { playbackModeHint, repeatLabel } from '@/player/modes';
 import { upcomingIds } from '@/player/queue';
@@ -75,6 +76,7 @@ function SleepTimer() {
 }
 
 export default function PlayerScreen() {
+  useSeo({ title: 'Reproduciendo', noindex: true });
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const track = useCurrentTrack();

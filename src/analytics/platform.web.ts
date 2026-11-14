@@ -1,5 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core';
 
+import { isStandalone } from '@/lib/standalone';
 import { osFromUserAgent } from '@/lib/userAgent';
 
 import type { PlatformInfo } from './platform';
@@ -39,6 +40,7 @@ export function describePlatform(): PlatformInfo {
     // Por el propio dominio (netlify.toml): los bloqueadores cortan us.i.posthog.com.
     proxyBase: published ? `${window.location.origin}/pulso` : null,
     allowed: (published || pref === 'forzar') && pref !== 'no' && !doNotTrack,
-    extra: { $host: host },
+    // pwa: abierta como app instalada desde la web, no en una pestaña.
+    extra: { $host: host, pwa: isStandalone() },
   };
 }

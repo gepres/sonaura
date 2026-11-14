@@ -9,12 +9,14 @@ import { EmptyState, PillButton, SectionTitle } from '@/components/ui';
 import { confirmAction } from '@/lib/confirm';
 import { formatBytes, pluralize } from '@/lib/format';
 import { contentFrame } from '@/lib/layout';
+import { useSeo } from '@/lib/seo';
 import { playAll, playFrom } from '@/player/actions';
 import { downloadsSupported, totalDownloadedBytes, useDownloads } from '@/state/downloads';
 import { useLibrary } from '@/state/library';
 import { colors, space, typo } from '@/theme';
 
 export default function DownloadsScreen() {
+  useSeo({ title: 'Descargas', noindex: true });
   const insets = useSafeAreaInsets();
   const items = useDownloads((s) => s.items);
   const progress = useDownloads((s) => s.progress);

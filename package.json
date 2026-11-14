@@ -60,7 +60,7 @@
     "test": "jest",
     "typecheck": "tsc --noEmit",
     "icons": "node scripts/generate-icons.mjs",
-    "web:export": "expo export -p web --output-dir dist-web --clear",
+    "web:export": "expo export -p web --output-dir dist-web --clear && node scripts/sitemap.mjs dist-web",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
     "tauri": "tauri"
